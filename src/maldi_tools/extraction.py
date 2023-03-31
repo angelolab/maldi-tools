@@ -252,8 +252,8 @@ def coordinate_integration(peak_df: pd.DataFrame, imz_data: ImzMLParser) -> xr.D
 
     imz_coordinates: list = imz_data.coordinates
 
-    x_size: int = max(imz_coordinates, key=itemgetter(0))
-    y_size: int = max(imz_coordinates, key=itemgetter(1))
+    x_size: int = max(imz_coordinates, key=itemgetter(0))[0]
+    y_size: int = max(imz_coordinates, key=itemgetter(1))[1]
 
     image_shape: Tuple[int, int] = (x_size, y_size)
 
