@@ -8,8 +8,9 @@ to the user supplied library.
 
 import os
 from functools import partial
+from operator import itemgetter
 from pathlib import Path
-from typing import Dict
+from typing import Dict, Tuple
 
 import numpy as np
 import pandas as pd
@@ -21,9 +22,7 @@ from tqdm.notebook import tqdm
 from maldi_tools import plotting
 
 
-def extract_spectra(
-    imz_data: ImzMLParser, intensity_percentile: int, scan_setting: str = "scanSettings0"
-) -> tuple[pd.DataFrame, np.ndarray]:
+def extract_spectra(imz_data: ImzMLParser, intensity_percentile: int) -> tuple[pd.DataFrame, np.ndarray]:
     """Iterates over all coordinates after opening the `imzML` data and extracts all masses, and sums the
     intensities for all masses. Creates an intensity image, thresholded on `intensity_percentile` with
     `np.percentile`. The masses are then sorted.
@@ -32,8 +31,6 @@ def extract_spectra(
     ----
         imz_data (ImzMLParser): The imzML object.
         intensity_percentile (int): Used to compute the q-th percentile of the intensities.
-        scan_setting (str): Different imzML files may have different properties for scan_settings
-        in order to get the dimensions of the image. Defaults to "scanSettings0"
 
     Returns:
     -------
@@ -41,14 +38,19 @@ def extract_spectra(
         the total masses and their intensities, and the second element is the thresholds matrix of the
         image.
     """
-    x_size: int = imz_data.metadata.scan_settings[scan_setting]["max count of pixels x"]
-    y_size: int = imz_data.metadata.scan_settings[scan_setting]["max count of pixels y"]
-    image_shape: tuple[int, int] = (x_size, y_size)
+    imz_coordinates: list = imz_data.coordinates
+
+    x_size: int = max(imz_coordinates, key=itemgetter(0))[0]
+    y_size: int = max(imz_coordinates, key=itemgetter(1))[1]
+
+    print(x_size, y_size)
+
+    image_shape: Tuple[int, int] = (x_size, y_size)
 
     thresholds: np.ndarray = np.zeros(image_shape)
     total_spectra: Dict[float, float] = {}
 
-    for idx, (x, y, _) in tqdm(enumerate(imz_data.coordinates), total=len(imz_data.coordinates)):
+    for idx, (x, y, _) in tqdm(enumerate(imz_data.coordinates), total=len(imz_coordinates)):
         mzs, intensities = imz_data.getspectrum(idx)
         for mass_idx, mz in enumerate(mzs):
             total_spectra[mz] = (0 if mz not in total_spectra else total_spectra[mz]) + intensities[mass_idx]
@@ -248,9 +250,12 @@ def coordinate_integration(peak_df: pd.DataFrame, imz_data: ImzMLParser) -> xr.D
     unique_peaks = peak_df["peak"].unique()
     peak_dict = dict(zip(unique_peaks, np.arange((len(unique_peaks)))))
 
-    x_size: int = imz_data.metadata.scan_settings["scanSettings0"]["max count of pixels x"]
-    y_size: int = imz_data.metadata.scan_settings["scanSettings0"]["max count of pixels y"]
-    image_shape: tuple[int, int] = (x_size, y_size)
+    imz_coordinates: list = imz_data.coordinates
+
+    x_size: int = max(imz_coordinates, key=itemgetter(0))
+    y_size: int = max(imz_coordinates, key=itemgetter(1))
+
+    image_shape: Tuple[int, int] = (x_size, y_size)
 
     imgs = np.zeros((len(unique_peaks), *image_shape))
 

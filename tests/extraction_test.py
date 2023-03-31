@@ -65,10 +65,9 @@ def total_mass_df(rng: np.random.Generator) -> pd.DataFrame:
 
 def test_extract_spectra(imz_data: ImzMLParser) -> None:
     intensity_percentile: int = 99
-    scan_setting: str = "scanSettings1"
 
     total_mass_df, thresholds = extraction.extract_spectra(
-        imz_data=imz_data, intensity_percentile=intensity_percentile, scan_setting=scan_setting
+        imz_data=imz_data, intensity_percentile=intensity_percentile
     )
 
     assert thresholds.shape == (10, 10)
