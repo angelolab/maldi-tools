@@ -54,3 +54,36 @@ multi_line_output = 3
 
 [tool.mypy]
 ignore_missing_imports = true
+
+
+## COVERAGE ##
+
+[tool.coverage.paths]
+source = ["src", "*/site-packages"]
+
+[tool.coverage.run]
+branch = true
+source = ["maldi_tools"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "except ImportError",
+    "raise AssertionError",
+    "raise NotImplementedError",
+]
+
+show_missing = true
+ignore_errors = false
+fail_under = 0
+omit = ["**/*test*.py"]
+
+## TESTING ##
+
+[tool.pytest.ini_options]
+addopts = ["-vv", "-s", "--cov", "--pycodestyle", "--cov-report=lcov"]
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore::PendingDeprecationWarning",
+]
+testpaths = ["tests"]
+norecursedirs = ["tests/utilities"]
