@@ -32,7 +32,7 @@ This will install all the dependencies and the most up-to-date version of `maldi
 Maldi-Tools can be started by first activating the Conda environment with:
 
 ```sh
-conda activate maldi-tools
+conda activate maldi-pipeline
 ```
 
 and then the Jupyter interface can be started with:
