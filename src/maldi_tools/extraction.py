@@ -43,8 +43,6 @@ def extract_spectra(imz_data: ImzMLParser, intensity_percentile: int) -> tuple[p
     x_size: int = max(imz_coordinates, key=itemgetter(0))[0]
     y_size: int = max(imz_coordinates, key=itemgetter(1))[1]
 
-    print(x_size, y_size)
-
     image_shape: Tuple[int, int] = (x_size, y_size)
 
     thresholds: np.ndarray = np.zeros(image_shape)
