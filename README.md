@@ -56,7 +56,7 @@ Next, install the repo's `pre-commit` hooks with:
 ```sh
 pre-commit install --install-hooks
 ```
-Pre-commit hooks will sort imports, fix formatting, and lint your code for you. They run on each commit, but you may also run the manually with:
+Pre-commit hooks will sort imports, fix formatting, and lint your code for you. They run on each commit, but you may also run them manually with:
 
 ```sh
 pre-commit run --all-files
