@@ -292,7 +292,7 @@ def _matching_vec(obs_mz: pd.Series, library_peak_df: pd.DataFrame, ppm: int) ->
     """
     for row in library_peak_df.itertuples():
         lib_mz = row.mz
-        mass_error = np.abs((1 - lib_mz / obs_mz) * 1e6)
+        mass_error = np.absolute((1 - lib_mz / obs_mz) * 1e6)
         if mass_error <= ppm:
             return pd.Series([lib_mz, True, row.composition, mass_error])
         else:
@@ -313,7 +313,7 @@ def library_matching(
     Args:
     ----
         image_xr (xr.DataArray): A data structure which holds all the images for each peak.
-        library_peak_df (pd.DataFrame): The library of interest to match the obs`erved peaks with.
+        library_peak_df (pd.DataFrame): The library of interest to match the observed peaks with.
         ppm (int): The ppm for an acceptable mass error range between the observed mass and any target
         mass in the library.
         extraction_dir (Path): The directory to save extracted data in.
