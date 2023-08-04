@@ -18,6 +18,7 @@ scikit-image = "^0.20.0"
 tqdm = "^4.65.0"
 alpineer = "^0.1.5"
 scikit-learn = "^1.2.2"
+matchms = "^0.21.1"
 
 [tool.poetry.group.dev.dependencies]
 jupyterlab = "^3.6.2"
