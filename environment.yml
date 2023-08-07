@@ -14,5 +14,5 @@ dependencies:
   - scikit-image
   - matplotlib
   - pip:
-    - alpineer
-    - .
+    - alpineer --user
+    - . --user
