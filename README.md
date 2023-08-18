@@ -16,7 +16,7 @@ The fastest way to get up and running with **Maldi Tools** is to create a `conda
 Once you have any one of these installed, clone the repository with:
 
 ```sh
-git clone maldi-tools
+git clone [maldi-tools](https://github.com/angelolab/maldi-tools.git)
 ```
 
 Then change the directory to `maldi-tools` and create the environment:
