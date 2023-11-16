@@ -29,7 +29,8 @@ def test_rolling_window(total_mass_df: pd.DataFrame) -> None:
     intensity_percentile: int = 99
     window_setting: int = 10
     log_intensities, log_int_percentile = extraction.rolling_window(
-        total_mass_df=total_mass_df, intensity_percentile=intensity_percentile, window_size=window_setting
+        total_mass_df=total_mass_df, intensity_percentile=intensity_percentile,
+        window_size=window_setting
     )
     assert log_intensities.shape == (10000,)
     assert log_int_percentile.shape == (10000,)
@@ -51,7 +52,10 @@ def test_signal_extraction(
     assert np.all(peak_candidates[1:] >= peak_candidates[:-1])
 
 
-def test_get_peak_widths(total_mass_df: pd.DataFrame, peak_idx_candidates: tuple[np.ndarray, np.ndarray]):
+def test_get_peak_widths(
+    total_mass_df: pd.DataFrame,
+    peak_idx_candidates: tuple[np.ndarray, np.ndarray]
+):
     peak_candidate_idxs, peak_candidates = peak_idx_candidates
     peak_df, l_ips_r, r_ips_r, peak_widths_height = extraction.get_peak_widths(
         total_mass_df=total_mass_df,
@@ -119,7 +123,8 @@ def test__matching_vec(library: pd.DataFrame, obs_mz: int, true_values: pd.Serie
 
 
 @pytest.mark.parametrize(argnames="_ppm", argvalues=[99])
-def test_library_matching(image_xr: xr.DataArray, library: pd.DataFrame, _ppm: int, tmp_path: pathlib.Path):
+def test_library_matching(image_xr: xr.DataArray, library: pd.DataFrame, _ppm: int,
+                          tmp_path: pathlib.Path):
     extraction_dir = tmp_path / "extraction_dir"
     extraction_dir.mkdir(parents=True, exist_ok=True)
 
@@ -137,3 +142,23 @@ def test_library_matching(image_xr: xr.DataArray, library: pd.DataFrame, _ppm: i
             assert row.mass_error == 0
             assert row.composition in {"A", "B"}
             assert row.peak in {30, 45}
+
+
+def test_generate_glycan_mask(imz_data: ImzMLParser, glycan_img_path: pathlib.Path):
+    glycan_mask: np.ndarray = extraction.generate_glycan_mask(imz_data, glycan_img_path)
+    coords: np.ndarray = np.array([coord[:2] for coord in imz_data.coordinates])
+    assert np.all(glycan_mask[coords[:, 1] - 1, coords[:, 0] - 1] == 255)
+
+
+def test_map_coordinates_to_core_name(imz_data: ImzMLParser, centroid_path: pathlib.Path,
+                                      poslog_path: pathlib.Path):
+    region_core_info: pd.DataFrame = extraction.map_coordinates_to_core_name(
+        imz_data, centroid_path, poslog_path
+    )
+
+    region_core_mapping = region_core_info[["Region", "Core"]].drop_duplicates()
+    region_core_dict = region_core_mapping.set_index("Region")["Core"].to_dict()
+
+    assert region_core_dict["R0"] == "Region0"
+    assert region_core_dict["R1"] == "Region1"
+    assert len(region_core_dict) == 2
