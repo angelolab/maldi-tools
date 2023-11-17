@@ -1,13 +1,12 @@
 """Shared Fixtures for tests."""
 
+import json
 from pathlib import Path
 from typing import Generator, List
 
-import json
 import numpy as np
 import pandas as pd
 import pytest
-import random
 import skimage.io as io
 import xarray as xr
 from pyimzml.ImzMLParser import ImzMLParser
@@ -120,8 +119,7 @@ def image_xr(rng: np.random.Generator, library: pd.DataFrame) -> Generator[xr.Da
 
 
 @pytest.fixture(scope="session")
-def glycan_img_path(tmp_path_factory: TempPathFactory, imz_data: ImzMLParser,
-                    rng: np.random.Generator):
+def glycan_img_path(tmp_path_factory: TempPathFactory, imz_data: ImzMLParser, rng: np.random.Generator):
     coords: np.ndarray = np.array([coord[:2] for coord in imz_data.coordinates])
 
     glycan_img: np.ndarray = np.zeros((10, 10))
@@ -137,10 +135,9 @@ def glycan_img_path(tmp_path_factory: TempPathFactory, imz_data: ImzMLParser,
 def poslog_path(tmp_path_factory: TempPathFactory, imz_data: ImzMLParser):
     columns_write: List[str] = ["Date", "Time", "Region", "PosX", "PosY", "X", "Y", "Z"]
     poslog_data: pd.DataFrame = pd.DataFrame(
-        np.random.rand(len(imz_data.coordinates) + 2, len(columns_write)),
-        columns=columns_write
+        np.random.rand(len(imz_data.coordinates) + 2, len(columns_write)), columns=columns_write
     )
-    coords: np.ndarray = np.array([coord[:2] for coord in imz_data.coordinates])
+    np.array([coord[:2] for coord in imz_data.coordinates])
 
     poslog_regions: List[str] = []
     for i in np.arange(2):
@@ -149,9 +146,7 @@ def poslog_path(tmp_path_factory: TempPathFactory, imz_data: ImzMLParser):
     poslog_data["Region"] = poslog_regions
 
     poslog_file: Path = tmp_path_factory.mktemp("poslogs") / "poslog.txt"
-    poslog_data.to_csv(
-        poslog_file, header=None, index=False, sep=" ", mode='w', columns=columns_write
-    )
+    poslog_data.to_csv(poslog_file, header=None, index=False, sep=" ", mode="w", columns=columns_write)
 
     yield poslog_file
 
@@ -161,17 +156,14 @@ def centroid_path(tmp_path_factory: TempPathFactory, imz_data: ImzMLParser):
     coords: np.ndarray = np.array([coord[:2] for coord in imz_data.coordinates])
     center_coord_indices: np.ndarray = np.arange(25, coords.shape[0], 50)
 
-    centroid_data = {}
+    centroid_data: dict = {}
     centroid_data["exportDateTime"] = None
     centroid_data["fovs"] = []
     for i, cci in enumerate(center_coord_indices):
         center_coord = coords[cci, :]
         center_point_data = {
             "name": f"Region{i}",
-            "centerPointPixels": {
-                "x": center_coord[0].item(),
-                "y": center_coord[1].item()
-            }
+            "centerPointPixels": {"x": center_coord[0].item(), "y": center_coord[1].item()},
         }
         centroid_data["fovs"].append(center_point_data)
 

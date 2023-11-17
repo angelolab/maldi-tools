@@ -16,12 +16,12 @@ from typing import Dict, Tuple
 import numpy as np
 import pandas as pd
 import xarray as xr
+from alpineer.io_utils import validate_paths
 from pyimzml.ImzMLParser import ImzMLParser
 from scipy import signal
-from skimage.io import imread, imsave
+from skimage.io import imread
 from tqdm.notebook import tqdm
 
-from alpineer.io_utils import validate_paths
 from maldi_tools import plotting
 
 
@@ -346,7 +346,7 @@ def generate_glycan_mask(
     imz_data: ImzMLParser,
     glycan_img_path: Path,
 ):
-    """Generate a mask for a provided glycan image input/
+    """Generate a mask for a provided glycan image input/.
 
     Args:
     ---
@@ -374,7 +374,7 @@ def map_coordinates_to_core_name(
     centroid_path: Path,
     poslog_path: Path,
 ):
-    """Maps each scanned coordinate on a slide to their respective core name (created by TSAI tiler)
+    """Maps each scanned coordinate on a slide to their respective core name (created by TSAI tiler).
 
     Args:
     ---
@@ -397,7 +397,7 @@ def map_coordinates_to_core_name(
         delimiter=" ",
         names=["Date", "Time", "Region", "PosX", "PosY", "X", "Y", "Z"],
         index_col=False,
-        skiprows=1
+        skiprows=1,
     )
     region_core_info = region_core_info[region_core_info["Region"] != "__"].copy()
 
@@ -412,13 +412,8 @@ def map_coordinates_to_core_name(
     for core in centroid_data["fovs"]:
         center_point = core["centerPointPixels"]
         region_match = region_core_info.loc[
-            (
-                region_core_info["X"] == center_point["x"]
-            ) &
-            (
-                region_core_info["Y"] == center_point["y"]
-            ),
-            "Region"
+            (region_core_info["X"] == center_point["x"]) & (region_core_info["Y"] == center_point["y"]),
+            "Region",
         ].values[0]
         core_region_mapping[region_match] = core["name"]
 
