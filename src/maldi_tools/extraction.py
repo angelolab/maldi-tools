@@ -11,7 +11,7 @@ import os
 from functools import partial
 from operator import itemgetter
 from pathlib import Path
-from typing import Dict, Tuple
+from typing import Dict, List, Tuple
 
 import numpy as np
 import pandas as pd
@@ -342,33 +342,6 @@ def library_matching(
     return peak_df
 
 
-def generate_glycan_mask(
-    imz_data: ImzMLParser,
-    glycan_img_path: Path,
-):
-    """Generate a mask for a provided glycan image input/.
-
-    Args:
-    ---
-        imz_data (ImzMLParser): The imzML object, needed for coordinate identification.
-        glycan_img_path (Path): The path to the glycan image .tiff, needed to create the base mask.
-
-    Returns:
-    -------
-        np.ndarray:
-            The binary segmentation mask of the glycan image
-    """
-    validate_paths([glycan_img_path])
-
-    glycan_img = imread(glycan_img_path)
-    glycan_mask = np.zeros(glycan_img.shape)
-
-    coords = np.array([coord[:2] for coord in imz_data.coordinates])
-    glycan_mask[coords[:, 1] - 1, coords[:, 0] - 1] = 255
-
-    return glycan_mask
-
-
 def map_coordinates_to_core_name(
     imz_data: ImzMLParser,
     centroid_path: Path,
@@ -419,3 +392,31 @@ def map_coordinates_to_core_name(
 
     region_core_info["Core"] = region_core_info["Region"].map(core_region_mapping)
     return region_core_info
+
+
+def generate_glycan_mask(
+    imz_data: ImzMLParser, glycan_img_path: Path, region_core_info: pd.DataFrame, cores_to_crop: List[str]
+):
+    """Generate a mask for the specified cores, provided a glycan image input.
+
+    Args:
+    ---
+        imz_data (ImzMLParser): The imzML object, needed for coordinate identification.
+        glycan_img_path (Path): The path to the glycan image .tiff, needed to create the base mask.
+        region_core_info (pd.DataFrame): Defines the coordinates associated with each FOV.
+        cores_to_crop (List[str]): Which cores to segment out.
+
+    Returns:
+    -------
+        np.ndarray:
+            The binary segmentation mask of the glycan image
+    """
+    validate_paths([glycan_img_path])
+
+    glycan_img = imread(glycan_img_path)
+    glycan_mask = np.zeros(glycan_img.shape)
+
+    coords = region_core_info.loc[region_core_info["Core"].isin(cores_to_crop), ["X", "Y"]].values
+    glycan_mask[coords[:, 1] - 1, coords[:, 0] - 1] = 255
+
+    return glycan_mask

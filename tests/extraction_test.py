@@ -2,6 +2,7 @@
 
 import os
 import pathlib
+from typing import List
 
 import numpy as np
 import pandas as pd
@@ -139,12 +140,6 @@ def test_library_matching(image_xr: xr.DataArray, library: pd.DataFrame, _ppm: i
             assert row.peak in {30, 45}
 
 
-def test_generate_glycan_mask(imz_data: ImzMLParser, glycan_img_path: pathlib.Path):
-    glycan_mask: np.ndarray = extraction.generate_glycan_mask(imz_data, glycan_img_path)
-    coords: np.ndarray = np.array([coord[:2] for coord in imz_data.coordinates])
-    assert np.all(glycan_mask[coords[:, 1] - 1, coords[:, 0] - 1] == 255)
-
-
 def test_map_coordinates_to_core_name(
     imz_data: ImzMLParser, centroid_path: pathlib.Path, poslog_path: pathlib.Path
 ):
@@ -152,9 +147,32 @@ def test_map_coordinates_to_core_name(
         imz_data, centroid_path, poslog_path
     )
 
-    region_core_mapping = region_core_info[["Region", "Core"]].drop_duplicates()
-    region_core_dict = region_core_mapping.set_index("Region")["Core"].to_dict()
+    region_core_mapping: pd.DataFrame = region_core_info[["Region", "Core"]].drop_duplicates()
+    region_core_dict: dict = region_core_mapping.set_index("Region")["Core"].to_dict()
 
     assert region_core_dict["R0"] == "Region0"
     assert region_core_dict["R1"] == "Region1"
     assert len(region_core_dict) == 2
+
+
+def test_generate_glycan_mask(
+    imz_data: ImzMLParser,
+    glycan_img_path: pathlib.Path,
+    centroid_path: pathlib.Path,
+    poslog_path: pathlib.Path,
+):
+    region_core_info: pd.DataFrame = extraction.map_coordinates_to_core_name(
+        imz_data, centroid_path, poslog_path
+    )
+    core_names: List[str] = list(region_core_info.keys())
+
+    glycan_mask: np.ndarray = extraction.generate_glycan_mask(
+        imz_data, glycan_img_path, region_core_info, [core_names[0]]
+    )
+    coords = region_core_info.loc[region_core_info["Core"] == core_names[0], ["X", "Y"]].values
+    assert np.all(glycan_mask[coords[:, 1] - 1, coords[:, 0] - 1] == 255)
+
+    non_hit_mask: np.ndarray = np.ones(glycan_mask.shape, dtype=bool)
+    for coord in coords:
+        non_hit_mask &= ~np.all(glycan_mask == coord, axis=1)
+    assert np.all(glycan_mask[non_hit_mask] == 0)
