@@ -133,10 +133,10 @@ def glycan_img_path(tmp_path_factory: TempPathFactory, imz_data: ImzMLParser, rn
 
 
 @pytest.fixture(scope="session")
-def poslog_path(tmp_path_factory: TempPathFactory, imz_data: ImzMLParser):
+def poslog_path(tmp_path_factory: TempPathFactory, imz_data: ImzMLParser, rng: np.random.Generator):
     columns_write: List[str] = ["Date", "Time", "Region", "PosX", "PosY", "X", "Y", "Z"]
     poslog_data: pd.DataFrame = pd.DataFrame(
-        np.random.rand(len(imz_data.coordinates) + 2, len(columns_write)), columns=columns_write
+        rng.random(size=(len(imz_data.coordinates) + 2, len(columns_write))), columns=columns_write
     )
     np.array([coord[:2] for coord in imz_data.coordinates])
 

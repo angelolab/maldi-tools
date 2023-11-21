@@ -26,9 +26,9 @@ from maldi_tools import plotting
 
 
 def extract_spectra(imz_data: ImzMLParser, intensity_percentile: int) -> tuple[pd.DataFrame, np.ndarray]:
-    """Iterates over all coordinates after opening the `imzML` data and extracts all masses, and sums the
-    intensities for all masses. Creates an intensity image, thresholded on `intensity_percentile` with
-    `np.percentile`. The masses are then sorted.
+    """Iterates over all coordinates after opening the `imzML` data and extracts all masses,
+    and sums the intensities for all masses. Creates an intensity image, thresholded on
+    `intensity_percentile` with `np.percentile`. The masses are then sorted.
 
     Args:
     ----
@@ -38,8 +38,8 @@ def extract_spectra(imz_data: ImzMLParser, intensity_percentile: int) -> tuple[p
     Returns:
     -------
         tuple[pd.DataFrame, np.ndarray]: A tuple where the first element is the dataframe containing
-        the total masses and their intensities, and the second element is the thresholds matrix of the
-        image.
+        the total masses and their intensities, and the second element is the thresholds matrix
+        of the image.
     """
     imz_coordinates: list = imz_data.coordinates
 
@@ -73,14 +73,16 @@ def rolling_window(
 
     Args:
     ----
-        total_mass_df (pd.DataFrame): A dataframe containing all the masses and their relative intensities.
+        total_mass_df (pd.DataFrame): A dataframe containing all the masses and their
+            relative intensities.
         intensity_percentile (int): The intensity for the quantile calculation.
-        window_size (int, optional): The sizve of the window for the rolling window method. Defaults to 5000.
+        window_size (int, optional): The sizve of the window for the rolling window method.
+            Defaults to 5000.
 
     Returns:
     -------
-        tuple[np.ndarray, np.ndarray]: A tuple where the first element is the log intensities, and the second
-        element is the log intensity percentiles.
+        tuple[np.ndarray, np.ndarray]: A tuple where the first element is the log intensities,
+            and the second element is the log intensity percentiles.
     """
     plt_range_min_ind: int = 0
     plt_range_max_ind: int = len(total_mass_df["intensity"]) - 1
@@ -104,13 +106,14 @@ def signal_extraction(
 
     Args:
     ----
-        total_mass_df (pd.DataFrame): A dataframe containing all the masses and their relative intensities.
+        total_mass_df (pd.DataFrame): A dataframe containing all the masses and their
+            relative intensities.
         log_int_percentile (np.ndarray): An array for the log intensity percentiles.
 
     Returns:
     -------
-        tuple[np.ndarray, np.ndarray]: A tuple where the first element is the peak candidate indexes, and
-        the second is the candidate peaks.
+        tuple[np.ndarray, np.ndarray]: A tuple where the first element is the peak candidate
+            indexes, and the second is the candidate peaks.
     """
     peak_candidate_indexes, _peak_properties = signal.find_peaks(
         total_mass_df["intensity"].values, prominence=np.exp(log_int_percentile)
@@ -131,17 +134,18 @@ def get_peak_widths(
 
     Args:
     ----
-        total_mass_df (pd.DataFrame): A dataframe containing all the masses and their relative intensities.
+        total_mass_df (pd.DataFrame): A dataframe containing all the masses and their
+            relative intensities.
         peak_candidate_idxs (np.ndarray): A list containing the indexes of the discovered peaks.
         peak_candidates (np.ndarray): A list containing the discovered peaks.
         thresholds (np.ndarray): The threshold matrix of the image.
 
     Returns:
     -------
-        tuple[pd.DataFrame, np.ndarray, np.ndarray, np.ndarray]: A tuple where the first element is a
-        DataFrame of the unique peaks discovered from the signal extraction process. The second and third
-        elements are the lower and upper bounds, and the fourth element is the height of the contour lines
-        at which the peak widths were calculated from.
+        tuple[pd.DataFrame, np.ndarray, np.ndarray, np.ndarray]: A tuple where the first element is
+            a DataFrame of the unique peaks discovered from the signal extraction process.
+            The second and third elements are the lower and upper bounds, and the fourth element is
+            the height of the contour lines at which the peak widths were calculated from.
     """
     plt_range_min_ind: int = 0
     plt_range_max_ind: int = len(total_mass_df["intensity"]) - 1
