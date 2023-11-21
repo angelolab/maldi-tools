@@ -11,7 +11,7 @@ import os
 from functools import partial
 from operator import itemgetter
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -406,7 +406,10 @@ def map_coordinates_to_core_name(
 
 
 def generate_glycan_mask(
-    imz_data: ImzMLParser, glycan_img_path: Path, region_core_info: pd.DataFrame, cores_to_crop: List[str]
+    imz_data: ImzMLParser,
+    glycan_img_path: Path,
+    region_core_info: pd.DataFrame,
+    cores_to_crop: Optional[List[str]] = None,
 ):
     """Generate a mask for the specified cores, provided a glycan image input.
 
@@ -415,7 +418,7 @@ def generate_glycan_mask(
         imz_data (ImzMLParser): The imzML object, needed for coordinate identification.
         glycan_img_path (Path): The path to the glycan image .tiff, needed to create the base mask.
         region_core_info (pd.DataFrame): Defines the coordinates associated with each FOV.
-        cores_to_crop (List[str]): Which cores to segment out.
+        cores_to_crop (Optional[List[str]]): Which cores to segment out. If None, use all.
 
     Returns:
     -------
@@ -423,6 +426,8 @@ def generate_glycan_mask(
             The binary segmentation mask of the glycan image
     """
     validate_paths([glycan_img_path])
+    if not cores_to_crop:
+        cores_to_crop = region_core_info["Core"].unique().tolist()
 
     glycan_img = imread(glycan_img_path)
     glycan_mask = np.zeros(glycan_img.shape)

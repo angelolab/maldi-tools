@@ -168,18 +168,33 @@ def test_generate_glycan_mask(
     centroid_path: pathlib.Path,
     poslog_path: pathlib.Path,
 ):
+    # test for subset of FOVs
     region_core_info: pd.DataFrame = extraction.map_coordinates_to_core_name(
         imz_data, centroid_path, poslog_path
     )
-    core_names: List[str] = list(region_core_info.keys())
+    core_names: List[str] = list(region_core_info["Core"].unique())
 
     glycan_mask: np.ndarray = extraction.generate_glycan_mask(
         imz_data, glycan_img_path, region_core_info, [core_names[0]]
     )
-    coords = region_core_info.loc[region_core_info["Core"] == core_names[0], ["X", "Y"]].values
+    coords: np.ndarray = region_core_info.loc[region_core_info["Core"] == core_names[0], ["X", "Y"]].values
     assert np.all(glycan_mask[coords[:, 1] - 1, coords[:, 0] - 1] == 255)
 
-    non_hit_mask: np.ndarray = np.ones(glycan_mask.shape, dtype=bool)
-    for coord in coords:
-        non_hit_mask &= ~np.all(glycan_mask == coord, axis=1)
-    assert np.all(glycan_mask[non_hit_mask] == 0)
+    all_coords_X, all_coords_Y = np.meshgrid(np.arange(1, 11), np.arange(1, 11))
+    all_coords: np.ndarray = np.vstack((all_coords_X.ravel(), all_coords_Y.ravel())).T
+    coords_set: set = set(map(tuple, coords))
+    non_hit_indices: np.ndarray = np.array([tuple(coord) not in coords_set for coord in all_coords])
+    non_hit_coords: np.ndarray = all_coords[non_hit_indices]
+
+    assert np.all(glycan_mask[non_hit_coords[:, 1] - 1, non_hit_coords[:, 0] - 1] == 0)
+
+    # test for all FOVs
+    glycan_mask = extraction.generate_glycan_mask(imz_data, glycan_img_path, region_core_info)
+    coords = region_core_info.loc[:, ["X", "Y"]].values
+    assert np.all(glycan_mask[coords[:, 1] - 1, coords[:, 0] - 1] == 255)
+
+    coords_set = set(map(tuple, coords))
+    non_hit_indices = np.array([tuple(coord) not in coords_set for coord in all_coords])
+    non_hit_coords = all_coords[non_hit_indices]
+
+    assert np.all(glycan_mask[non_hit_coords[:, 1] - 1, non_hit_coords[:, 0] - 1] == 0)
