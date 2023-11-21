@@ -373,12 +373,11 @@ def map_coordinates_to_core_name(
         poslog_path,
         delimiter=" ",
         names=["Date", "Time", "Region", "PosX", "PosY", "X", "Y", "Z"],
+        usecols=["Region", "X", "Y"],
         index_col=False,
         skiprows=1,
     )
     region_core_info = region_core_info[region_core_info["Region"] != "__"].copy()
-
-    region_core_info = region_core_info[["Date", "Time", "Region", "X", "Y"]]
     region_core_info["Region"] = region_core_info["Region"].str.extract(r"^(.*?)(?=X)")
     region_core_info[["X", "Y"]] = coords
 
