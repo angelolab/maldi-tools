@@ -387,8 +387,15 @@ def map_coordinates_to_core_name(
         region_match = region_core_info.loc[
             (region_core_info["X"] == center_point["x"]) & (region_core_info["Y"] == center_point["y"]),
             "Region",
-        ].values[0]
-        core_region_mapping[region_match] = core["name"]
+        ]
+        if region_match.shape[0] == 0:
+            raise ValueError(
+                f"Could not find mapping of core {core['name']} to any location on the slide, "
+                "please verify that you positioned the central point of the core correctly "
+                "using the TSAI tiler, or that you've set the right poslog file."
+            )
+
+        core_region_mapping[region_match.values[0]] = core["name"]
 
     region_core_info["Core"] = region_core_info["Region"].map(core_region_mapping)
     return region_core_info

@@ -155,6 +155,13 @@ def test_map_coordinates_to_core_name(
     assert len(region_core_dict) == 2
 
 
+def test_map_coordinates_to_core_name_malformed(
+    imz_data: ImzMLParser, bad_centroid_path: pathlib.Path, poslog_path: pathlib.Path
+):
+    with pytest.raises(ValueError, match="Could not find mapping of core Region0"):
+        extraction.map_coordinates_to_core_name(imz_data, bad_centroid_path, poslog_path)
+
+
 def test_generate_glycan_mask(
     imz_data: ImzMLParser,
     glycan_img_path: pathlib.Path,

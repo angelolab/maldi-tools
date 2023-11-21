@@ -28,7 +28,8 @@ def imz_data(tmp_path_factory: TempPathFactory, rng: np.random.Generator) -> Imz
     img_dim: int = 10
 
     # Generate random integers n for each coordinate (10 x 10). These will be used for creating
-    # random m/z and intensity values of length n. Lengths n are distributed along the standard gamma.
+    # random m/z and intensity values of length n.
+    # Lengths n are distributed along the standard gamma.
     ns: np.ndarray = np.rint(rng.standard_gamma(shape=2.5, size=(img_dim**2)) * 100).astype(int)
 
     # Generate random masses and sample different amounts of them, so we get duplicates
@@ -164,6 +165,29 @@ def centroid_path(tmp_path_factory: TempPathFactory, imz_data: ImzMLParser):
         center_point_data = {
             "name": f"Region{i}",
             "centerPointPixels": {"x": center_coord[0].item(), "y": center_coord[1].item()},
+        }
+        centroid_data["fovs"].append(center_point_data)
+
+    centroid_file: Path = tmp_path_factory.mktemp("centroids") / "centroids.json"
+    with open(centroid_file, "w") as outfile:
+        outfile.write(json.dumps(centroid_data))
+
+    yield centroid_file
+
+
+@pytest.fixture(scope="session")
+def bad_centroid_path(tmp_path_factory: TempPathFactory, imz_data: ImzMLParser):
+    coords: np.ndarray = np.array([coord[:2] for coord in imz_data.coordinates])
+    center_coord_indices: np.ndarray = np.arange(25, coords.shape[0], 50)
+
+    centroid_data: dict = {}
+    centroid_data["exportDateTime"] = None
+    centroid_data["fovs"] = []
+    for i, cci in enumerate(center_coord_indices):
+        center_coord = coords[cci, :]
+        center_point_data = {
+            "name": f"Region{i}",
+            "centerPointPixels": {"x": center_coord[0].item() + 10000, "y": center_coord[1].item() + 10000},
         }
         centroid_data["fovs"].append(center_point_data)
 
