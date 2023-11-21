@@ -1,5 +1,5 @@
 # Formatting and Linting
-line-length = 110
+line-length = 100
 select = [
     "D", # pydocstyle
     "E", # pycodestyle Error
