@@ -9,6 +9,8 @@ import pandas as pd
 import pytest
 import xarray as xr
 from pyimzml.ImzMLParser import ImzMLParser
+from pytest import TempPathFactory
+from skimage.io import imread
 
 from maldi_tools import extraction
 
@@ -140,6 +142,26 @@ def test_library_matching(image_xr: xr.DataArray, library: pd.DataFrame, _ppm: i
             assert row.peak in {30, 45}
 
 
+def test_generate_glycan_mask(
+    tmp_path_factory: TempPathFactory, imz_data: ImzMLParser, glycan_img_path: pathlib.Path
+):
+    glycan_mask_path: pathlib.Path = tmp_path_factory.mktemp("glycan_mask") / "glycan_mask.tiff"
+    extraction.generate_glycan_mask(imz_data, glycan_img_path, glycan_mask_path)
+    assert os.path.exists(glycan_mask_path)
+
+    glycan_mask: np.ndarray = imread(glycan_mask_path)
+    coords: np.ndarray = np.array([coord[:2] for coord in imz_data.coordinates])
+    assert np.all(glycan_mask[coords[:, 1] - 1, coords[:, 0] - 1] == 255)
+
+    all_coords_X, all_coords_Y = np.meshgrid(np.arange(1, 11), np.arange(1, 11))
+    all_coords: np.ndarray = np.vstack((all_coords_X.ravel(), all_coords_Y.ravel())).T
+    coords_set: set = set(map(tuple, coords))
+    non_hit_indices: np.ndarray = np.array([tuple(coord) not in coords_set for coord in all_coords])
+    non_hit_coords: np.ndarray = all_coords[non_hit_indices]
+
+    assert np.all(glycan_mask[non_hit_coords[:, 1] - 1, non_hit_coords[:, 0] - 1] == 0)
+
+
 def test_map_coordinates_to_core_name(
     imz_data: ImzMLParser, centroid_path: pathlib.Path, poslog_path: pathlib.Path
 ):
@@ -162,7 +184,7 @@ def test_map_coordinates_to_core_name_malformed(
         extraction.map_coordinates_to_core_name(imz_data, bad_centroid_path, poslog_path)
 
 
-def test_generate_glycan_mask(
+def test_crop_glycan_cores(
     imz_data: ImzMLParser,
     glycan_img_path: pathlib.Path,
     centroid_path: pathlib.Path,
@@ -174,11 +196,11 @@ def test_generate_glycan_mask(
     )
     core_names: List[str] = list(region_core_info["Core"].unique())
 
-    glycan_mask: np.ndarray = extraction.generate_glycan_mask(
+    core_cropped_mask: np.ndarray = extraction.crop_glycan_cores(
         imz_data, glycan_img_path, region_core_info, [core_names[0]]
     )
     coords: np.ndarray = region_core_info.loc[region_core_info["Core"] == core_names[0], ["X", "Y"]].values
-    assert np.all(glycan_mask[coords[:, 1] - 1, coords[:, 0] - 1] == 255)
+    assert np.all(core_cropped_mask[coords[:, 1] - 1, coords[:, 0] - 1] == 255)
 
     all_coords_X, all_coords_Y = np.meshgrid(np.arange(1, 11), np.arange(1, 11))
     all_coords: np.ndarray = np.vstack((all_coords_X.ravel(), all_coords_Y.ravel())).T
@@ -186,15 +208,15 @@ def test_generate_glycan_mask(
     non_hit_indices: np.ndarray = np.array([tuple(coord) not in coords_set for coord in all_coords])
     non_hit_coords: np.ndarray = all_coords[non_hit_indices]
 
-    assert np.all(glycan_mask[non_hit_coords[:, 1] - 1, non_hit_coords[:, 0] - 1] == 0)
+    assert np.all(core_cropped_mask[non_hit_coords[:, 1] - 1, non_hit_coords[:, 0] - 1] == 0)
 
     # test for all FOVs
-    glycan_mask = extraction.generate_glycan_mask(imz_data, glycan_img_path, region_core_info)
+    core_cropped_mask = extraction.crop_glycan_cores(imz_data, glycan_img_path, region_core_info)
     coords = region_core_info.loc[:, ["X", "Y"]].values
-    assert np.all(glycan_mask[coords[:, 1] - 1, coords[:, 0] - 1] == 255)
+    assert np.all(core_cropped_mask[coords[:, 1] - 1, coords[:, 0] - 1] == 255)
 
     coords_set = set(map(tuple, coords))
     non_hit_indices = np.array([tuple(coord) not in coords_set for coord in all_coords])
     non_hit_coords = all_coords[non_hit_indices]
 
-    assert np.all(glycan_mask[non_hit_coords[:, 1] - 1, non_hit_coords[:, 0] - 1] == 0)
+    assert np.all(core_cropped_mask[non_hit_coords[:, 1] - 1, non_hit_coords[:, 0] - 1] == 0)
