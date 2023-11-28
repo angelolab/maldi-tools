@@ -356,7 +356,7 @@ def generate_glycan_mask(
     Args:
     ---
         imz_data (ImzMLParser): The imzML object, needed for coordinate identification.
-        glycan_img_path (Path): Location of the .tiff file containing the glycan scan
+        glycan_img_path (Path): Location of the .png file containing the glycan scan
         glycan_mask_path (Path): Location where the mask will be saved
     """
     validate_paths([glycan_img_path])
