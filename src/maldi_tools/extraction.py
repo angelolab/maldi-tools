@@ -361,10 +361,10 @@ def generate_glycan_mask(
     """
     validate_paths([glycan_img_path])
 
-    glycan_img = imread(glycan_img_path)
-    glycan_mask = np.zeros(glycan_img.shape)
+    glycan_img: np.ndarray = imread(glycan_img_path)
+    glycan_mask: np.ndarray = np.zeros(glycan_img.shape)
 
-    coords = np.array([coord[:2] for coord in imz_data.coordinates])
+    coords: np.ndarray = np.array([coord[:2] for coord in imz_data.coordinates])
     glycan_mask[coords[:, 1] - 1, coords[:, 0] - 1] = 255
     imsave(glycan_mask_path, glycan_mask)
 
@@ -391,8 +391,8 @@ def map_coordinates_to_core_name(
     """
     validate_paths([centroid_path, poslog_path])
 
-    coords = np.array([coord[:2] for coord in imz_data.coordinates])
-    region_core_info = pd.read_csv(
+    coords: np.ndarray = np.array([coord[:2] for coord in imz_data.coordinates])
+    region_core_info: pd.DataFrame = pd.read_csv(
         poslog_path,
         delimiter=" ",
         names=["Date", "Time", "Region", "PosX", "PosY", "X", "Y", "Z"],
@@ -405,12 +405,12 @@ def map_coordinates_to_core_name(
     region_core_info[["X", "Y"]] = coords
 
     with open(centroid_path, "r") as infile:
-        centroid_data = json.load(infile)
+        centroid_data: dict = json.load(infile)
 
-    core_region_mapping = {}
+    core_region_mapping: dict = {}
     for core in centroid_data["fovs"]:
-        center_point = core["centerPointPixels"]
-        region_match = region_core_info.loc[
+        center_point: dict = core["centerPointPixels"]
+        region_match: pd.Series = region_core_info.loc[
             (region_core_info["X"] == center_point["x"]) & (region_core_info["Y"] == center_point["y"]),
             "Region",
         ]
@@ -451,10 +451,10 @@ def crop_glycan_cores(
     if not cores_to_crop:
         cores_to_crop = region_core_info["Core"].unique().tolist()
 
-    glycan_mask = imread(glycan_mask_path)
-    core_cropped_mask = np.zeros(glycan_mask.shape)
+    glycan_mask: np.ndarray = imread(glycan_mask_path)
+    core_cropped_mask: np.ndarray = np.zeros(glycan_mask.shape)
 
-    coords = region_core_info.loc[region_core_info["Core"].isin(cores_to_crop), ["X", "Y"]].values
+    coords: np.ndarray = region_core_info.loc[region_core_info["Core"].isin(cores_to_crop), ["X", "Y"]].values
     core_cropped_mask[coords[:, 1] - 1, coords[:, 0] - 1] = 255
 
     return core_cropped_mask
