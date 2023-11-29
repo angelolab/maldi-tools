@@ -409,7 +409,7 @@ def map_coordinates_to_core_name(
         )
         region_core_sub = region_core_sub[region_core_sub["Region"] != "__"].copy()
         extracted: pd.Series = (
-            region_core_sub["Region"].str.extract(r"R(\d+)XY", expand=False).astype(int) + num_regions
+            region_core_sub["Region"].str.extract(r"R(\d+)X", expand=False).astype(int) + num_regions
         )
         region_core_sub["Region"] = extracted
 
