@@ -133,29 +133,32 @@ def glycan_img_path(tmp_path_factory: TempPathFactory, imz_data: ImzMLParser, rn
 
 
 @pytest.fixture(scope="session")
-def poslog_path(tmp_path_factory: TempPathFactory, imz_data: ImzMLParser, rng: np.random.Generator):
+def poslog_dir(tmp_path_factory: TempPathFactory, imz_data: ImzMLParser, rng: np.random.Generator):
     columns_write: List[str] = ["Date", "Time", "Region", "PosX", "PosY", "X", "Y", "Z"]
-    poslog_data: pd.DataFrame = pd.DataFrame(
-        rng.random(size=(len(imz_data.coordinates) + 2, len(columns_write))), columns=columns_write
-    )
-    np.array([coord[:2] for coord in imz_data.coordinates])
+    poslog_base_dir: Path = tmp_path_factory.mktemp("poslogs")
 
-    poslog_regions: List[str] = []
     for i in np.arange(2):
-        poslog_regions.append("__")
-        poslog_regions.extend([f"R{i}XY"] * 50)
-    poslog_data["Region"] = poslog_regions
+        poslog_data: pd.DataFrame = pd.DataFrame(
+            rng.random(size=(int(len(imz_data.coordinates) / 2) + 2, len(columns_write))),
+            columns=columns_write,
+        )
 
-    poslog_file: Path = tmp_path_factory.mktemp("poslogs") / "poslog.txt"
-    poslog_data.to_csv(poslog_file, header=None, index=False, sep=" ", mode="w", columns=columns_write)
+        poslog_regions: List[str] = []
+        for j in np.arange(2):
+            poslog_regions.append("__")
+            poslog_regions.extend([f"R{j}XY"] * 25)
+        poslog_data["Region"] = poslog_regions
 
-    yield poslog_file
+        poslog_file: Path = poslog_base_dir / f"poslog{i}.txt"
+        poslog_data.to_csv(poslog_file, header=None, index=False, sep=" ", mode="w", columns=columns_write)
+
+    yield poslog_base_dir
 
 
 @pytest.fixture(scope="session")
 def centroid_path(tmp_path_factory: TempPathFactory, imz_data: ImzMLParser):
     coords: np.ndarray = np.array([coord[:2] for coord in imz_data.coordinates])
-    center_coord_indices: np.ndarray = np.arange(25, coords.shape[0], 50)
+    center_coord_indices: np.ndarray = np.arange(10, coords.shape[0], 25)
 
     centroid_data: dict = {}
     centroid_data["exportDateTime"] = None
@@ -178,7 +181,7 @@ def centroid_path(tmp_path_factory: TempPathFactory, imz_data: ImzMLParser):
 @pytest.fixture(scope="session")
 def bad_centroid_path(tmp_path_factory: TempPathFactory, imz_data: ImzMLParser):
     coords: np.ndarray = np.array([coord[:2] for coord in imz_data.coordinates])
-    center_coord_indices: np.ndarray = np.arange(25, coords.shape[0], 50)
+    center_coord_indices: np.ndarray = np.arange(10, coords.shape[0], 25)
 
     centroid_data: dict = {}
     centroid_data["exportDateTime"] = None

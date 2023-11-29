@@ -163,39 +163,44 @@ def test_generate_glycan_mask(
 
 
 def test_map_coordinates_to_core_name(
-    imz_data: ImzMLParser, centroid_path: pathlib.Path, poslog_path: pathlib.Path
+    imz_data: ImzMLParser, centroid_path: pathlib.Path, poslog_dir: pathlib.Path
 ):
+    poslog_paths: List[pathlib.Path] = [poslog_dir / pf for pf in os.listdir(poslog_dir)]
     region_core_info: pd.DataFrame = extraction.map_coordinates_to_core_name(
-        imz_data, centroid_path, poslog_path
+        imz_data, centroid_path, poslog_paths
     )
 
     region_core_mapping: pd.DataFrame = region_core_info[["Region", "Core"]].drop_duplicates()
     region_core_dict: dict = region_core_mapping.set_index("Region")["Core"].to_dict()
 
-    assert region_core_dict["R0"] == "Region0"
-    assert region_core_dict["R1"] == "Region1"
-    assert len(region_core_dict) == 2
+    assert len(region_core_dict) == 4
+    assert region_core_dict[0] == "Region0"
+    assert region_core_dict[1] == "Region1"
+    assert region_core_dict[2] == "Region2"
+    assert region_core_dict[3] == "Region3"
 
 
 def test_map_coordinates_to_core_name_malformed(
-    imz_data: ImzMLParser, bad_centroid_path: pathlib.Path, poslog_path: pathlib.Path
+    imz_data: ImzMLParser, bad_centroid_path: pathlib.Path, poslog_dir: pathlib.Path
 ):
+    poslog_paths: List[pathlib.Path] = [poslog_dir / pf for pf in os.listdir(poslog_dir)]
     with pytest.raises(ValueError, match="Could not find mapping of core Region0"):
-        extraction.map_coordinates_to_core_name(imz_data, bad_centroid_path, poslog_path)
+        extraction.map_coordinates_to_core_name(imz_data, bad_centroid_path, poslog_paths)
 
 
 def test_crop_glycan_cores(
     imz_data: ImzMLParser,
     glycan_img_path: pathlib.Path,
     centroid_path: pathlib.Path,
-    poslog_path: pathlib.Path,
+    poslog_dir: pathlib.Path,
 ):
-    # test for subset of FOVs
+    poslog_paths: List[pathlib.Path] = [poslog_dir / pf for pf in os.listdir(poslog_dir)]
     region_core_info: pd.DataFrame = extraction.map_coordinates_to_core_name(
-        imz_data, centroid_path, poslog_path
+        imz_data, centroid_path, poslog_paths
     )
     core_names: List[str] = list(region_core_info["Core"].unique())
 
+    # test for subset of FOVs
     core_cropped_mask: np.ndarray = extraction.crop_glycan_cores(
         imz_data, glycan_img_path, region_core_info, [core_names[0]]
     )
