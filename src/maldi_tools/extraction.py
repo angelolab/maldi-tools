@@ -16,7 +16,7 @@ from typing import Dict, List, Optional, Tuple
 import numpy as np
 import pandas as pd
 import xarray as xr
-from alpineer.io_utils import validate_paths
+from alpineer.io_utils import list_files, remove_file_extensions, validate_paths
 from alpineer.misc_utils import verify_in_list
 from pyimzml.ImzMLParser import ImzMLParser
 from scipy import signal
@@ -444,19 +444,37 @@ def map_coordinates_to_core_name(
     return region_core_info
 
 
-def crop_glycan_cores(
-    imz_data: ImzMLParser,
+def generate_glycan_crop_masks(
     glycan_mask_path: Path,
     region_core_info: pd.DataFrame,
-    cores_to_crop: Optional[List[str]] = None,
+    glycan_crop_save_dir: Path,
 ):
+    """Generates and saves masks for each core in `region_core_info` for cropping purposes.
+
+    Args:
+    ---
+        glycan_mask_path (Path): The path to the glycan mask .tiff, needed to create the cropped mask.
+        region_core_info (pd.DataFrame): Defines the coordinates associated with each FOV.
+        glycan_crop_save_dir (Path): The directory to save the glycan crop masks.
+    """
+    validate_paths([glycan_mask_path])
+
+    glycan_mask: np.ndarray = imread(glycan_mask_path)
+    np.array([])
+
+    for core in region_core_info["Core"].unique():
+        core_cropped_mask: np.ndarray = np.zeros(glycan_mask.shape, dtype=np.int16)
+        coords: np.ndarray = region_core_info.loc[region_core_info["Core"] == core, ["X", "Y"]].values
+        core_cropped_mask[coords[:, 1] - 1, coords[:, 0] - 1] = 255
+        imsave(glycan_crop_save_dir / f"{core}.tiff", core_cropped_mask)
+
+
+def load_glycan_crop_masks(glycan_crop_save_dir: Path, cores_to_crop: Optional[List[str]] = None):
     """Generate a mask for cropping out the specified cores.
 
     Args:
     ---
-        imz_data (ImzMLParser): The imzML object, needed for coordinate identification.
-        glycan_mask_path (Path): The path to the glycan mask .tiff, needed to create the cropped mask.
-        region_core_info (pd.DataFrame): Defines the coordinates associated with each FOV.
+        glycan_crop_save_dir (Path): The directory containing the glycan crop mask for each individual core.
         cores_to_crop (Optional[List[str]]): Which cores to segment out. If None, use all.
 
     Returns:
@@ -464,16 +482,17 @@ def crop_glycan_cores(
         np.ndarray:
             The binary segmentation mask of the glycan image
     """
-    validate_paths([glycan_mask_path])
-    if not cores_to_crop:
-        cores_to_crop = region_core_info["Core"].unique().tolist()
+    validate_paths([glycan_crop_save_dir])
 
-    verify_in_list(specified_cores=cores_to_crop, all_cores=list(region_core_info["Core"]))
+    all_core_masks = remove_file_extensions(list_files(glycan_crop_save_dir, substrs=".tiff"))
+    cores = cores_to_crop if cores_to_crop else all_core_masks
+    verify_in_list(specified_cores=cores_to_crop, all_cores=all_core_masks)
 
-    glycan_mask: np.ndarray = imread(glycan_mask_path)
-    core_cropped_mask: np.ndarray = np.zeros(glycan_mask.shape, dtype=np.int16)
+    test_mask: np.ndarray = imread(os.path.join(glycan_crop_save_dir, f"{cores[0]}.tiff"))
+    glycan_mask: np.ndarray = np.zeros(test_mask.shape)
 
-    coords: np.ndarray = region_core_info.loc[region_core_info["Core"].isin(cores_to_crop), ["X", "Y"]].values
-    core_cropped_mask[coords[:, 1] - 1, coords[:, 0] - 1] = 255
+    for core in cores:
+        core_mask: np.ndarray = imread(glycan_crop_save_dir / f"{core}.tiff")
+        glycan_mask += core_mask
 
-    return core_cropped_mask
+    return glycan_mask

@@ -8,6 +8,8 @@ import numpy as np
 import pandas as pd
 import pytest
 import xarray as xr
+from alpineer.io_utils import list_files, remove_file_extensions
+from alpineer.misc_utils import verify_same_elements
 from pyimzml.ImzMLParser import ImzMLParser
 from pytest import TempPathFactory
 from skimage.io import imread
@@ -188,40 +190,50 @@ def test_map_coordinates_to_core_name_malformed(
         extraction.map_coordinates_to_core_name(imz_data, bad_centroid_path, poslog_paths)
 
 
-def test_crop_glycan_cores(
-    imz_data: ImzMLParser,
-    glycan_img_path: pathlib.Path,
-    centroid_path: pathlib.Path,
-    poslog_dir: pathlib.Path,
+def test_generate_glycan_crop_masks(
+    tmp_path_factory: TempPathFactory, glycan_img_path: pathlib.Path, region_core_info: pd.DataFrame
 ):
-    poslog_paths: List[pathlib.Path] = [poslog_dir / pf for pf in os.listdir(poslog_dir)]
-    region_core_info: pd.DataFrame = extraction.map_coordinates_to_core_name(
-        imz_data, centroid_path, poslog_paths
-    )
-    core_names: List[str] = list(region_core_info["Core"].unique())
+    glycan_crop_save_dir: pathlib.Path = tmp_path_factory.mktemp("glycan_crops")
+    extraction.generate_glycan_crop_masks(glycan_img_path, region_core_info, glycan_crop_save_dir)
 
-    # test for subset of FOVs
-    core_cropped_mask: np.ndarray = extraction.crop_glycan_cores(
-        imz_data, glycan_img_path, region_core_info, [core_names[0]]
-    )
-    coords: np.ndarray = region_core_info.loc[region_core_info["Core"] == core_names[0], ["X", "Y"]].values
-    assert np.all(core_cropped_mask[coords[:, 1] - 1, coords[:, 0] - 1] == 255)
+    core_names: List[str] = remove_file_extensions(list_files(glycan_crop_save_dir, substrs=".tiff"))
+    verify_same_elements(generated_core_masks=core_names, all_core_masks=region_core_info["Core"].unique())
 
     all_coords_X, all_coords_Y = np.meshgrid(np.arange(1, 11), np.arange(1, 11))
     all_coords: np.ndarray = np.vstack((all_coords_X.ravel(), all_coords_Y.ravel())).T
+    for core in core_names:
+        core_mask: np.ndarray = imread(glycan_crop_save_dir / f"{core}.tiff")
+        core_coords: np.ndarray = region_core_info.loc[region_core_info["Core"] == core, ["X", "Y"]].values
+        assert np.all(core_mask[core_coords[:, 1] - 1, core_coords[:, 0] - 1] == 255)
+
+        coords_set: set = set(map(tuple, core_coords))
+        non_hit_indices: np.ndarray = np.array([tuple(coord) not in coords_set for coord in all_coords])
+        non_hit_coords: np.ndarray = all_coords[non_hit_indices]
+        assert np.all(core_mask[non_hit_coords[:, 1] - 1, non_hit_coords[:, 0] - 1] == 0)
+
+
+def test_load_glycan_crop_masks(glycan_crop_save_dir: pathlib.Path, region_core_info: pd.DataFrame):
+    core_names: List[str] = remove_file_extensions(list_files(glycan_crop_save_dir))
+
+    all_coords_X, all_coords_Y = np.meshgrid(np.arange(1, 11), np.arange(1, 11))
+    all_coords: np.ndarray = np.vstack((all_coords_X.ravel(), all_coords_Y.ravel())).T
+
+    # test for a subset of FOVs
+    core_cropped_mask: np.ndarray = extraction.load_glycan_crop_masks(glycan_crop_save_dir, [core_names[0]])
+    coords: np.ndarray = region_core_info.loc[region_core_info["Core"] == core_names[0], ["X", "Y"]].values
+    assert np.all(core_cropped_mask[coords[:, 1] - 1, coords[:, 0] - 1] == 255)
+
     coords_set: set = set(map(tuple, coords))
     non_hit_indices: np.ndarray = np.array([tuple(coord) not in coords_set for coord in all_coords])
     non_hit_coords: np.ndarray = all_coords[non_hit_indices]
-
     assert np.all(core_cropped_mask[non_hit_coords[:, 1] - 1, non_hit_coords[:, 0] - 1] == 0)
 
     # test for all FOVs
-    core_cropped_mask = extraction.crop_glycan_cores(imz_data, glycan_img_path, region_core_info)
+    core_cropped_mask = extraction.load_glycan_crop_masks(glycan_crop_save_dir)
     coords = region_core_info.loc[:, ["X", "Y"]].values
     assert np.all(core_cropped_mask[coords[:, 1] - 1, coords[:, 0] - 1] == 255)
 
     coords_set = set(map(tuple, coords))
     non_hit_indices = np.array([tuple(coord) not in coords_set for coord in all_coords])
     non_hit_coords = all_coords[non_hit_indices]
-
     assert np.all(core_cropped_mask[non_hit_coords[:, 1] - 1, non_hit_coords[:, 0] - 1] == 0)

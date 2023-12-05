@@ -1,6 +1,7 @@
 """Shared Fixtures for tests."""
 
 import json
+import os
 from pathlib import Path
 from typing import Generator, List
 
@@ -120,7 +121,9 @@ def image_xr(rng: np.random.Generator, library: pd.DataFrame) -> Generator[xr.Da
 
 
 @pytest.fixture(scope="session")
-def glycan_img_path(tmp_path_factory: TempPathFactory, imz_data: ImzMLParser, rng: np.random.Generator):
+def glycan_img_path(
+    tmp_path_factory: TempPathFactory, imz_data: ImzMLParser, rng: np.random.Generator
+) -> Generator[Path, None, None]:
     coords: np.ndarray = np.array([coord[:2] for coord in imz_data.coordinates])
 
     glycan_img: np.ndarray = np.zeros((10, 10))
@@ -133,7 +136,9 @@ def glycan_img_path(tmp_path_factory: TempPathFactory, imz_data: ImzMLParser, rn
 
 
 @pytest.fixture(scope="session")
-def poslog_dir(tmp_path_factory: TempPathFactory, imz_data: ImzMLParser, rng: np.random.Generator):
+def poslog_dir(
+    tmp_path_factory: TempPathFactory, imz_data: ImzMLParser, rng: np.random.Generator
+) -> Generator[Path, None, None]:
     columns_write: List[str] = ["Date", "Time", "Region", "PosX", "PosY", "X", "Y", "Z"]
     poslog_base_dir: Path = tmp_path_factory.mktemp("poslogs")
 
@@ -156,7 +161,7 @@ def poslog_dir(tmp_path_factory: TempPathFactory, imz_data: ImzMLParser, rng: np
 
 
 @pytest.fixture(scope="session")
-def centroid_path(tmp_path_factory: TempPathFactory, imz_data: ImzMLParser):
+def centroid_path(tmp_path_factory: TempPathFactory, imz_data: ImzMLParser) -> Generator[Path, None, None]:
     coords: np.ndarray = np.array([coord[:2] for coord in imz_data.coordinates])
     center_coord_indices: np.ndarray = np.arange(10, coords.shape[0], 25)
 
@@ -179,7 +184,9 @@ def centroid_path(tmp_path_factory: TempPathFactory, imz_data: ImzMLParser):
 
 
 @pytest.fixture(scope="session")
-def bad_centroid_path(tmp_path_factory: TempPathFactory, imz_data: ImzMLParser):
+def bad_centroid_path(
+    tmp_path_factory: TempPathFactory, imz_data: ImzMLParser
+) -> Generator[Path, None, None]:
     coords: np.ndarray = np.array([coord[:2] for coord in imz_data.coordinates])
     center_coord_indices: np.ndarray = np.arange(10, coords.shape[0], 25)
 
@@ -199,3 +206,23 @@ def bad_centroid_path(tmp_path_factory: TempPathFactory, imz_data: ImzMLParser):
         outfile.write(json.dumps(centroid_data))
 
     yield centroid_file
+
+
+@pytest.fixture(scope="session")
+def region_core_info(imz_data: ImzMLParser, centroid_path: Path, poslog_dir: Path) -> pd.DataFrame:
+    poslog_paths: List[Path] = [poslog_dir / pf for pf in os.listdir(poslog_dir)]
+    region_core_info: pd.DataFrame = extraction.map_coordinates_to_core_name(
+        imz_data, centroid_path, poslog_paths
+    )
+
+    yield region_core_info
+
+
+@pytest.fixture(scope="session")
+def glycan_crop_save_dir(
+    tmp_path_factory: TempPathFactory, glycan_img_path: Path, region_core_info: pd.DataFrame
+) -> Generator[Path, None, None]:
+    glycan_crop_save_dir: Path = tmp_path_factory.mktemp("glycan_crops")
+    extraction.generate_glycan_crop_masks(glycan_img_path, region_core_info, glycan_crop_save_dir)
+
+    yield glycan_crop_save_dir
