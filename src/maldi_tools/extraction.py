@@ -458,15 +458,13 @@ def generate_glycan_crop_masks(
         glycan_crop_save_dir (Path): The directory to save the glycan crop masks.
     """
     validate_paths([glycan_mask_path])
-
     glycan_mask: np.ndarray = imread(glycan_mask_path)
-    np.array([])
 
     for core in region_core_info["Core"].unique():
         core_cropped_mask: np.ndarray = np.zeros(glycan_mask.shape, dtype=np.uint32)
         coords: np.ndarray = region_core_info.loc[region_core_info["Core"] == core, ["X", "Y"]].values
         core_cropped_mask[coords[:, 1] - 1, coords[:, 0] - 1] = 255
-        imsave(glycan_crop_save_dir / f"{core}.tiff", core_cropped_mask)
+        imsave(Path(glycan_crop_save_dir) / f"{core}.tiff", core_cropped_mask)
 
 
 def load_glycan_crop_masks(glycan_crop_save_dir: Path, cores_to_crop: Optional[List[str]] = None):
