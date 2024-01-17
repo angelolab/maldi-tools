@@ -363,7 +363,7 @@ def generate_glycan_mask(
     validate_paths([glycan_img_path])
 
     glycan_img: np.ndarray = imread(glycan_img_path)
-    glycan_mask: np.ndarray = np.zeros(glycan_img.shape)
+    glycan_mask: np.ndarray = np.zeros(glycan_img.shape, dtype=np.uint32)
 
     coords: np.ndarray = np.array([coord[:2] for coord in imz_data.coordinates])
     glycan_mask[coords[:, 1] - 1, coords[:, 0] - 1] = 255
@@ -463,7 +463,7 @@ def generate_glycan_crop_masks(
     np.array([])
 
     for core in region_core_info["Core"].unique():
-        core_cropped_mask: np.ndarray = np.zeros(glycan_mask.shape, dtype=np.int16)
+        core_cropped_mask: np.ndarray = np.zeros(glycan_mask.shape, dtype=np.uint32)
         coords: np.ndarray = region_core_info.loc[region_core_info["Core"] == core, ["X", "Y"]].values
         core_cropped_mask[coords[:, 1] - 1, coords[:, 0] - 1] = 255
         imsave(glycan_crop_save_dir / f"{core}.tiff", core_cropped_mask)
@@ -489,7 +489,7 @@ def load_glycan_crop_masks(glycan_crop_save_dir: Path, cores_to_crop: Optional[L
     verify_in_list(specified_cores=cores_to_crop, all_cores=all_core_masks)
 
     test_mask: np.ndarray = imread(os.path.join(glycan_crop_save_dir, f"{cores[0]}.tiff"))
-    glycan_mask: np.ndarray = np.zeros(test_mask.shape)
+    glycan_mask: np.ndarray = np.zeros(test_mask.shape, dtype=np.uint32)
 
     for core in cores:
         core_mask: np.ndarray = imread(glycan_crop_save_dir / f"{core}.tiff")
