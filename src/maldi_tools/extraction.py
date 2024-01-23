@@ -486,11 +486,11 @@ def load_glycan_crop_masks(glycan_crop_save_dir: Path, cores_to_crop: Optional[L
     cores = cores_to_crop if cores_to_crop else all_core_masks
     verify_in_list(specified_cores=cores_to_crop, all_cores=all_core_masks)
 
-    test_mask: np.ndarray = imread(os.path.join(glycan_crop_save_dir, f"{cores[0]}.tiff"))
+    test_mask: np.ndarray = imread(Path(glycan_crop_save_dir) / f"{cores[0]}.tiff")
     glycan_mask: np.ndarray = np.zeros(test_mask.shape, dtype=np.uint8)
 
     for core in cores:
-        core_mask: np.ndarray = imread(glycan_crop_save_dir / f"{core}.tiff")
+        core_mask: np.ndarray = imread(Path(glycan_crop_save_dir) / f"{core}.tiff")
         glycan_mask += core_mask
 
     return glycan_mask
