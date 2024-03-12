@@ -63,26 +63,36 @@ def extract_spectra(imz_data: ImzMLParser, intensity_percentile: int) -> tuple[p
     return (total_mass_df, thresholds)
 
 
-def bin_spectra(total_mass_df: pd.DataFrame, precision: int = 3):
+def bin_spectra(total_mass_df: pd.DataFrame, precision: int = 3, bin_width: float = 0.002):
     """Bins the spectra in a similar manner as SciLS does on their backend.
 
     NOTE: the result will not exactly match, but will provide a similar level of granularity.
 
     Args:
     ----
-        total_mass_df (pd.DataFrame): A dataframe containing all the masses and their relative intensities.
+        total_mass_df (pd.DataFrame):
+            A dataframe containing all the masses and their relative intensities.
+        precision (int):
+            The number of decimals to include
+        bin_width (float):
+            The size of each bin to create
 
     Returns:
         pd.DataFrame: the spectra data assigned to m/z bins
     """
+    # define each bin to use
+    min_spectra = np.round(total_mass_df["m/z"].min(), precision)
+    max_spectra = np.round(total_mass_df["m/z"].max(), precision)
+    bin_edges = (min_spectra - 10**-precision, max_spectra + 10**-precision, bin_width)
+
+    # assign the bins accordingly
     total_mass_df_binned = total_mass_df.copy()
-    total_mass_df_binned["m/z_binned"] = (total_mass_df_binned["m/z"] * 10**precision).round() / (
-        10**precision
+    total_mass_df_binned["binned_mz"] = (
+        pd.cut(total_mass_df_binned["m/z"], bins=bin_edges, labels=bin_edges[:-1], right=False).astype(float)
+        + 0.001
     )
-    intensity_aggregated = total_mass_df_binned.groupby("m/z_binned")["intensity"].sum().reset_index()
-    total_mass_df_binned = pd.DataFrame(
-        {"m/z": intensity_aggregated["m/z_binned"], "intensity": intensity_aggregated["intensity"]}
-    )
+    total_mass_df_binned = total_mass_df_binned.groupby("binned_mz")["intensity"].sum().reset_index()
+    total_mass_df_binned.columns = ["binned_m/z", "sum_intensity"]
 
     return total_mass_df_binned
 
