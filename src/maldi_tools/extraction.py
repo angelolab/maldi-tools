@@ -63,6 +63,30 @@ def extract_spectra(imz_data: ImzMLParser, intensity_percentile: int) -> tuple[p
     return (total_mass_df, thresholds)
 
 
+def bin_spectra(total_mass_df: pd.DataFrame, precision: int = 3):
+    """Bins the spectra in a similar manner as SciLS does on their backend.
+
+    NOTE: the result will not exactly match, but will provide a similar level of granularity.
+
+    Args:
+    ----
+        total_mass_df (pd.DataFrame): A dataframe containing all the masses and their relative intensities.
+
+    Returns:
+        pd.DataFrame: the spectra data assigned to m/z bins
+    """
+    total_mass_df_binned = total_mass_df.copy()
+    total_mass_df_binned["m/z_binned"] = (total_mass_df_binned["m/z"] * 10**precision).round() / (
+        10**precision
+    )
+    intensity_aggregated = total_mass_df_binned.groupby("m/z_binned")["intensity"].sum().reset_index()
+    total_mass_df_binned = pd.DataFrame(
+        {"m/z": intensity_aggregated["m/z_binned"], "intensity": intensity_aggregated["intensity"]}
+    )
+
+    return total_mass_df_binned
+
+
 def rolling_window(
     total_mass_df: pd.DataFrame, intensity_percentile: int, window_size: int = 5000
 ) -> tuple[np.ndarray, np.ndarray]:
