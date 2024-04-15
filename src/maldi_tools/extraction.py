@@ -275,8 +275,8 @@ def coordinate_integration(peak_df: pd.DataFrame, imz_data: ImzMLParser) -> xr.D
 
 
 def _matching_vec(obs_mz: pd.Series, library_peak_df: pd.DataFrame, ppm: int) -> pd.Series:
-    """Finds the first matching mass in the target library for each observed mass if it exists within a
-    tolerance determined by ppm.
+    """Finds the matching mass with the lowest mass error in the target library
+    for each observed mass if it exists within a tolerance determined by ppm.
 
     Args:
     ----
@@ -290,14 +290,16 @@ def _matching_vec(obs_mz: pd.Series, library_peak_df: pd.DataFrame, ppm: int) ->
         pd.Series: A series containing the library mass, a boolean if a match is discovered, the composition,
         and the error mass error value.
     """
+    min_matching_mass_data = [np.nan, False, np.nan, np.nan]
     for row in library_peak_df.itertuples():
         lib_mz = row.mz
         mass_error = np.absolute((1 - lib_mz / obs_mz) * 1e6)
         if mass_error <= ppm:
-            return pd.Series([lib_mz, True, row.composition, mass_error])
+            if np.isnan(min_matching_mass_data[3]) or mass_error < min_matching_mass_data[3]:
+                min_matching_mass_data = [lib_mz, True, row.composition, mass_error]
         else:
             continue
-    return pd.Series([np.nan, False, np.nan, np.nan])
+    return pd.Series(min_matching_mass_data)
 
 
 def library_matching(
