@@ -5,12 +5,12 @@ to the user supplied library.
 - TODO: Adduct matching
 
 """
-
+import bisect
 import os
 from functools import partial
 from operator import itemgetter
 from pathlib import Path
-from typing import Dict, Tuple
+from typing import Dict, List, Tuple
 
 import numpy as np
 import pandas as pd
@@ -22,7 +22,40 @@ from tqdm.notebook import tqdm
 from maldi_tools import plotting
 
 
-def extract_spectra(imz_data: ImzMLParser, intensity_percentile: int) -> tuple[pd.DataFrame, np.ndarray]:
+def generate_mz_bins(min_mz: float = 800, max_mz: float = 4000) -> np.ndarray:
+    """Given a range of mz values, generate the bins as would be calculated by Bruker's SCiLS.
+
+    To convert from an mz value to its corresponding bin size, use mz_val / 200 / 1000, since the
+    bin sizes are measured in mDa.
+
+    Note that the computed values may be slightly off the SCiLS values, as the latter has floating
+    point errors.
+
+    Args:
+    ----
+        min_mz (float): The minimum mz extracted to start the binning at
+        max_mz (float): The maximum mz extracted to start the binning at
+
+    Returns:
+    -------
+        np.ndarray: The list of mz values to use for binning the observed mz values
+    """
+    mz_bins: List[float] = [min_mz]
+    while True:
+        mz_right: float = mz_bins[-1] + mz_bins[-1] / 200000
+
+        if mz_right >= max_mz:
+            if mz_bins[-1] != max_mz:
+                mz_bins.append(max_mz)
+            break
+        mz_bins.append(mz_right)
+
+    return np.array(mz_bins)
+
+
+def extract_spectra(
+    imz_data: ImzMLParser, intensity_percentile: int, min_mz: float = 800, max_mz: float = 4000
+) -> tuple[pd.DataFrame, np.ndarray]:
     """Iterates over all coordinates after opening the `imzML` data and extracts all masses, and sums the
     intensities for all masses. Creates an intensity image, thresholded on `intensity_percentile` with
     `np.percentile`. The masses are then sorted.
@@ -31,6 +64,8 @@ def extract_spectra(imz_data: ImzMLParser, intensity_percentile: int) -> tuple[p
     ----
         imz_data (ImzMLParser): The imzML object.
         intensity_percentile (int): Used to compute the q-th percentile of the intensities.
+        min_mz (float): The minimum mz extracted to start the binning at
+        max_mz (float): The maximum mz extracted to start the binning at
 
     Returns:
     -------
@@ -48,10 +83,19 @@ def extract_spectra(imz_data: ImzMLParser, intensity_percentile: int) -> tuple[p
     thresholds: np.ndarray = np.zeros(image_shape)
     total_spectra: Dict[float, float] = {}
 
+    mz_bins: np.ndarray = generate_mz_bins(min_mz, max_mz)
+
     for idx, (x, y, _) in tqdm(enumerate(imz_data.coordinates), total=len(imz_coordinates)):
         mzs, intensities = imz_data.getspectrum(idx)
         for mass_idx, mz in enumerate(mzs):
-            total_spectra[mz] = (0 if mz not in total_spectra else total_spectra[mz]) + intensities[mass_idx]
+            mz_bin_index: int = bisect.bisect_left(mz_bins, mz)
+            if mz_bin_index > 0 and mz_bins[mz_bin_index - 1] >= mz:
+                mz_bin_index -= 1
+
+            mz_bin: float = mz_bins[mz_bin_index]
+            total_spectra[mz_bin] = (0 if mz not in total_spectra else total_spectra[mz_bin]) + intensities[
+                mass_idx
+            ]
 
         thresholds[x - 1, y - 1] = np.percentile(intensities, intensity_percentile)
 
@@ -61,40 +105,6 @@ def extract_spectra(imz_data: ImzMLParser, intensity_percentile: int) -> tuple[p
     total_mass_df.reset_index(drop=True, inplace=True)
 
     return (total_mass_df, thresholds)
-
-
-def bin_spectra(total_mass_df: pd.DataFrame, precision: int = 3, bin_width: float = 0.002):
-    """Bins the spectra in a similar manner as SciLS does on their backend.
-
-    NOTE: the result will not exactly match, but will provide a similar level of granularity.
-
-    Args:
-    ----
-        total_mass_df (pd.DataFrame):
-            A dataframe containing all the masses and their relative intensities.
-        precision (int):
-            The number of decimals to include
-        bin_width (float):
-            The size of each bin to create
-
-    Returns:
-        pd.DataFrame: the spectra data assigned to m/z bins
-    """
-    # define each bin to use
-    min_spectra = np.round(total_mass_df["m/z"].min(), precision)
-    max_spectra = np.round(total_mass_df["m/z"].max(), precision)
-    bin_edges = (min_spectra - 10**-precision, max_spectra + 10**-precision, bin_width)
-
-    # assign the bins accordingly
-    total_mass_df_binned = total_mass_df.copy()
-    total_mass_df_binned["binned_mz"] = (
-        pd.cut(total_mass_df_binned["m/z"], bins=bin_edges, labels=bin_edges[:-1], right=False).astype(float)
-        + 0.001
-    )
-    total_mass_df_binned = total_mass_df_binned.groupby("binned_mz")["intensity"].sum().reset_index()
-    total_mass_df_binned.columns = ["binned_m/z", "sum_intensity"]
-
-    return total_mass_df_binned
 
 
 def rolling_window(
