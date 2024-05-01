@@ -82,7 +82,6 @@ def extract_spectra(
 
     thresholds: np.ndarray = np.zeros(image_shape)
     total_spectra: Dict[float, float] = {}
-
     mz_bins: np.ndarray = generate_mz_bins(min_mz, max_mz)
 
     for idx, (x, y, _) in tqdm(enumerate(imz_data.coordinates), total=len(imz_coordinates)):
