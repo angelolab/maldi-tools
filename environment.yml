@@ -15,4 +15,5 @@ dependencies:
   - matplotlib
   - pip:
     - alpineer
+    - git+https://github.com/angelolab/pyimzML.git
     - .
