@@ -233,7 +233,6 @@ def peak_spectra(
 
 
 def coordinate_integration(
-    total_mass_df: pd.DataFrame,
     peak_df: pd.DataFrame,
     l_ips_r: np.ndarray,
     r_ips_r: np.ndarray,
@@ -271,13 +270,11 @@ def coordinate_integration(
     for idx, (x, y, _) in tqdm(enumerate(imz_data.coordinates), total=len(imz_data.coordinates)):
         mzs, intensities = imz_data.getspectrum(idx)
 
-        intensities[np.isin(mzs, peak_df["m/z"])]
-
         for i_idx, peak in peak_df.loc[peak_df["m/z"].isin(mzs), "peak"].reset_index(drop=True).items():
-            left_idx = abs(total_mass_df.values - l_ips_r[i_idx]).idxmin()
-            right_idx = abs(total_mass_df.values - r_ips_r[i_idx]).idxmin()
+            left_idx = abs(intensities.values - l_ips_r[i_idx]).idxmin()
+            right_idx = abs(intensities.values - r_ips_r[i_idx]).idxmin()
             imgs[peak_dict[peak], x - 1, y - 1] += integrate.simpson(
-                total_mass_df.values[left_idx:right_idx]
+                intensities.values[left_idx:right_idx]
             ) - (peak_widths_height * (right_idx - left_idx))
 
     img_data = xr.DataArray(
