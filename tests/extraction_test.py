@@ -97,7 +97,16 @@ def test_peak_spectra(
 
 def test_coordinate_integration(imz_data, peak_widths):
     peak_df, *_ = peak_widths
-    img_data = extraction.coordinate_integration(peak_df=peak_df, imz_data=imz_data)
+    l_ips_r = np.arange(0, peak_df.shape[0], 5)
+    r_ips_r = l_ips_r + 2
+    peak_widths_height = np.repeat(2, peak_df.shape[0])
+    img_data = extraction.coordinate_integration(
+        peak_df=peak_df,
+        l_ips_r=l_ips_r,
+        r_ips_r=r_ips_r,
+        peak_widths_height=peak_widths_height,
+        imz_data=imz_data,
+    )
 
     # Make sure the shape of any given image is correct.
     assert img_data.shape[1:] == (10, 10)
