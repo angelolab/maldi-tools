@@ -10,11 +10,11 @@ import os
 from functools import partial
 from operator import itemgetter
 from pathlib import Path
-from typing import Dict, Tuple
+from typing import Dict, List, Tuple
 
 import numpy as np
 import pandas as pd
-import xarray as xr
+from alpineer import image_utils, io_utils
 from pyimzml.ImzMLParser import ImzMLParser
 from scipy import signal
 from tqdm.notebook import tqdm
@@ -232,21 +232,20 @@ def peak_spectra(
     return panel_df
 
 
-def coordinate_integration(peak_df: pd.DataFrame, imz_data: ImzMLParser) -> xr.DataArray:
+def coordinate_integration(peak_df: pd.DataFrame, imz_data: ImzMLParser, extraction_dir: Path) -> None:
     """Integrates the coordinates with the discovered, post-processed peaks and generates an image for
     each of the peaks using the imzML coordinate data.
+
+    Saves the peak images to specified extraction_dir.
 
     Args:
     ----
         peak_df (pd.DataFrame): The unique peaks from the data.
         imz_data (ImzMLParser): The imzML object.
-
-    Returns:
-    -------
-        xr.DataArray: A data structure which holds all the images for each peak.
+        extraction_dir (Path): The directory to save extracted data (peak images) in.
     """
     unique_peaks = peak_df["peak"].unique()
-    peak_dict = dict(zip(unique_peaks, np.arange((len(unique_peaks)))))
+    dict(zip(unique_peaks, np.arange((len(unique_peaks)))))
 
     imz_coordinates: list = imz_data.coordinates
 
@@ -255,23 +254,23 @@ def coordinate_integration(peak_df: pd.DataFrame, imz_data: ImzMLParser) -> xr.D
 
     image_shape: Tuple[int, int] = (x_size, y_size)
 
-    imgs = np.zeros((len(unique_peaks), *image_shape))
+    os.makedirs(extraction_dir / "float")
+    os.makedirs(extraction_dir / "int")
 
     for idx, (x, y, _) in tqdm(enumerate(imz_data.coordinates), total=len(imz_data.coordinates)):
+        peak_img: np.ndarray = np.zeros((1, *image_shape))
         mzs, intensities = imz_data.getspectrum(idx)
-
         intensity: np.ndarray = intensities[np.isin(mzs, peak_df["m/z"])]
 
         for i_idx, peak in peak_df.loc[peak_df["m/z"].isin(mzs), "peak"].reset_index(drop=True).items():
-            imgs[peak_dict[peak], x - 1, y - 1] += intensity[i_idx]
-
-    img_data = xr.DataArray(
-        data=imgs,
-        coords={"peak": unique_peaks, "x": range(x_size), "y": range(y_size)},
-        dims=["peak", "x", "y"],
-    )
-
-    return img_data
+            peak_img[x - 1, y - 1] += intensity[i_idx]
+            peak_img_float: np.ndarray = peak_img.T
+            peak_img_int: np.ndarray = (peak_img_float * (2**32 - 1) / np.max(peak_img_float)).astype(
+                np.uint32
+            )
+            img_name: str = f"{peak:.4f}".replace(".", "_")
+            image_utils.save_image(fname=extraction_dir / "float" / f"{img_name}.tiff", data=peak_img_float)
+            image_utils.save_image(fname=extraction_dir / "int" / f"{img_name}.tiff", data=peak_img_int)
 
 
 def _matching_vec(obs_mz: pd.Series, library_peak_df: pd.DataFrame, ppm: int) -> pd.Series:
@@ -301,7 +300,6 @@ def _matching_vec(obs_mz: pd.Series, library_peak_df: pd.DataFrame, ppm: int) ->
 
 
 def library_matching(
-    image_xr: xr.DataArray,
     library_peak_df: pd.DataFrame,
     ppm: int,
     extraction_dir: Path,
@@ -312,7 +310,6 @@ def library_matching(
 
     Args:
     ----
-        image_xr (xr.DataArray): A data structure which holds all the images for each peak.
         library_peak_df (pd.DataFrame): The library of interest to match the observed peaks with.
         ppm (int): The ppm for an acceptable mass error range between the observed mass and any target
         mass in the library.
@@ -324,7 +321,11 @@ def library_matching(
         pd.DataFrame: Contains the peak, the library target mass, a boolean stating if a match was found
         or not, the composition name and the mass error if a match was found or not.
     """
-    peak_df = pd.DataFrame({"peak": image_xr.peak.to_numpy()})
+    peak_list: List[float] = [
+        float(p.replace("_", "."))
+        for p in io_utils.remove_file_extensions(io_utils.list_files(extraction_dir / "float"))
+    ]
+    peak_df = pd.DataFrame({"peak": np.array(peak_list)})
     match_fun = partial(_matching_vec, library_peak_df=library_peak_df, ppm=ppm)
 
     peak_df[["lib_mz", "matched", "composition", "mass_error"]] = peak_df["peak"].apply(
