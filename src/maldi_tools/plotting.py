@@ -11,6 +11,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import skimage.io as io
 import xarray as xr
 from alpineer import image_utils
 from tqdm.notebook import tqdm
@@ -152,8 +153,26 @@ def save_peak_images(image_xr: xr.DataArray, extraction_dir: Path) -> None:
         image_utils.save_image(fname=int_dir / f"{img_name}.tiff", data=integer_img)
 
 
+def plot_peak_hist(peak: float, bin_count: int, extraction_dir: Path) -> None:
+    """Plot a histogram of the intensities of a provided peak image.
+
+    Args:
+    ----
+        peak (float): The desired peak to visualize
+        bin_count (int): The bin size to use for the histogram
+        extraction_dir (Path): The directory the peak images are saved in
+    """
+    # verify that the peak provided exists
+    peak_path = extraction_dir / f"{str(peak).replace('.', '_')}.tiff"
+    if not os.path.exists(peak_path):
+        raise FileNotFoundError(f"Peak {peak} does not have a corresponding peak image in {extraction_dir}")
+
+    # load the peak image in and display histogram
+    peak_img: np.ndarray = io.imread(peak_path)
+    plt.hist(peak_img.values, bins=bin_count)
+
+
 def save_matched_peak_images(
-    image_xr: xr.DataArray,
     matched_peaks_df: pd.DataFrame,
     extraction_dir: Path,
 ) -> None:
@@ -161,7 +180,6 @@ def save_matched_peak_images(
 
     Args:
     ----
-        image_xr (xr.DataArray): A data structure which holds all the images for each peak.
         matched_peaks_df (pd.DataFrame): A dataframe containing the peaks matched with the library.
         extraction_dir (Path): The directory to save extracted data in.
     """
@@ -175,10 +193,13 @@ def save_matched_peak_images(
     matched_peaks_df_filtered: pd.DataFrame = matched_peaks_df.dropna()
 
     for row in tqdm(matched_peaks_df_filtered.itertuples(), total=len(matched_peaks_df_filtered)):
-        image_index = row.Index
-
-        float_img: np.ndarray = image_xr[image_index, ...].values.T
-        integer_img: np.ndarray = (float_img * (2**32 - 1) / np.max(float_img)).astype(np.uint32)
+        # load in the corresponding float and integer images
+        float_img: np.ndarray = io.imread(
+            extraction_dir / "float" / f"{str(row.lib_mz).replace('.', '_')}.tiff"
+        )
+        integer_img: np.ndarray = io.imread(
+            extraction_dir / "int" / f"{str(row.lib_mz).replace('.', '_')}.tiff"
+        )
 
         img_name: str = row.composition
 
