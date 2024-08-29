@@ -8,6 +8,7 @@ to the user supplied library.
 
 import json
 import os
+import warnings
 from functools import partial
 from operator import itemgetter
 from pathlib import Path
@@ -431,10 +432,19 @@ def map_coordinates_to_core_name(
             "Region",
         ]
         if region_match.shape[0] == 0:
-            raise ValueError(
+            core_centroid_distances: pd.Series = np.sqrt(
+                (region_core_info["x"] - center_point["x"]) ** 2
+                + (region_core_info["y"] - center_point["y"]) ** 2
+            )
+            region_match = region_core_info.iloc[core_centroid_distances.idxmin(), 0]
+
+            # TODO: add an error threshold of a few pixels, shouldn't naively map everything
+            warnings.warn(
                 f"Could not find mapping of core {core['name']} to any location on the slide, "
                 "please verify that you positioned the central point of the core correctly "
-                "using the TSAI tiler, or that you've set the right poslog file."
+                "using the TSAI tiler, or that you've set the right poslog file.\n\n"
+                f"The closest region to the core's centroid is {region_match.values[0]}, "
+                "using this as finalized mapping."
             )
 
         core_region_mapping[region_match.values[0]] = core["name"]
