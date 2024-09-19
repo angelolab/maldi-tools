@@ -16,7 +16,7 @@ def test_extract_spectra(imz_data: ImzMLParser) -> None:
     intensity_percentile: int = 99
 
     total_mass_df, thresholds = extraction.extract_spectra(
-        imz_data=imz_data, intensity_percentile=intensity_percentile
+        imz_data=imz_data, intensity_percentile=intensity_percentile, min_mz=3000, max_mz=10000
     )
 
     assert thresholds.shape == (10, 10)
