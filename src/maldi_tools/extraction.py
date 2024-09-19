@@ -1,6 +1,8 @@
 """Used for extracting spectra data, filtering intensities and masses, and matching the discovered m/z peaks
 to the user supplied library.
 
+NOTE: this workflow will most likely be deprecated in favor of the pyTDFSDK workflow
+
 - TODO: Parallel spectra extraction
 - TODO: Adduct matching
 
