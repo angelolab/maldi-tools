@@ -20,7 +20,7 @@ from pyTDFSDK.classes import TsfData
 from pyTDFSDK.init_tdf_sdk import init_tdf_sdk_api
 from pyTDFSDK.tsf import tsf_index_to_mz, tsf_read_line_spectrum_v2
 
-# Initialize the TDFSDK binary loader
+# Path to the TDFSDK binary file
 BASE_PATH = Path(os.path.dirname(os.path.realpath(__file__)))
 
 
