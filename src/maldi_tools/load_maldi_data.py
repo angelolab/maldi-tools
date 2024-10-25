@@ -105,28 +105,19 @@ def extract_maldi_tsf_data(
     mz_bins: np.ndarray = generate_mz_bins(min_mz, max_mz)
     spectra_dict: Dict[float, float] = {}
     tsf_spot_info: pd.DataFrame = tsf_cursor.analysis["Frames"]
-    with open("sample_log.txt", "a") as outfile:
-        outfile.write(f"Processing {tsf_spot_info.shape[0]} spots")
-    print(f"Processing {tsf_spot_info.shape[0]} spots")
     for sid in tsf_spot_info["Id"].values:
-        # assert sid < len(tsf_spot_info)
         index_arr, intensity_arr = tsf_read_line_spectrum_v2(
             tdf_sdk=tdf_sdk_binary, handle=tsf_cursor.handle, frame_id=sid
         )
-        # assert sid < len(mz_arr)
         mz_arr: np.ndarray = tsf_index_to_mz(
             tdf_sdk=tdf_sdk_binary, handle=tsf_cursor.handle, frame_id=sid, indices=index_arr
         )
 
         for mz, intensity in zip(mz_arr, intensity_arr):
-            # assert bisect_left(mz_bins, mz) < len(mz_bins)
             binned_mz = mz_bins[bisect_left(mz_bins, mz)]
             spectra_dict[binned_mz] = (
                 0 if binned_mz not in spectra_dict else spectra_dict[binned_mz]
             ) + intensity
-        if sid % 5000 == 0:
-            with open("sample_log.txt", "a") as outfile:
-                outfile.write(f"Processed {tsf_spot_info.shape[0]} spots")
 
     run_name = os.path.basename(os.path.splitext(maldi_data_path)[0])
     tsf_spectra: pd.DataFrame = pd.DataFrame(spectra_dict.items(), columns=["m/z", "intensity"])
@@ -170,7 +161,6 @@ def extract_maldi_run_spectra(
     spectra_df: pd.DataFrame = pd.DataFrame()
 
     with ProcessPoolExecutor(max_workers=num_workers) as executor:
-        print("Starting process pool")
         future_maldi_data = {
             executor.submit(extract_maldi_tsf_data, mp, min_mz, max_mz): mp for mp in maldi_paths
         }
@@ -183,18 +173,6 @@ def extract_maldi_run_spectra(
                 spectra_df = pd.concat([spectra_df, spectra_mp])
             except Exception as e:
                 print(f"Exception raised while processing {mp}")
-                print(e)
-
-    # for mp in maldi_paths:
-    #     print(f"Processing data {mp}")
-    #     start = default_timer()
-    #     poslog_mp, spectra_mp = extract_maldi_tsf_data(
-    #         mp, min_mz, max_mz
-    #     )
-    #     poslog_df = pd.concat([poslog_df, poslog_mp])
-    #     spectra_df = pd.concat([spectra_df, spectra_mp])
-    #     end = default_timer()
-    #     print(f"Total time to process: {end - start}")
 
     poslog_df = poslog_df.reset_index(drop=True)
     spectra_df = spectra_df.reset_index(drop=True)
