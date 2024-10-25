@@ -68,12 +68,12 @@ def init_tsf_load_object(
         maldi_data_path (Union[str, pathlib.Path]):
             The path to the raw MALDI data, must end with a `.d` extension
         tdf_sdk_binary (CDLL):
-            The dynamically loaded library created for the TsfData object
+            The dynamically loaded library created for the `TsfData` object
 
     Returns:
     -------
         pyTDFSDK.classes.TsfData:
-            The pyTDFSDK cursor for the MALDI data_path provided
+            The pyTDFSDK cursor for the `maldi_data_path` provided
     """
     return TsfData(maldi_data_path, tdf_sdk=tdf_sdk_binary)
 
