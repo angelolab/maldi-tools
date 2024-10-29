@@ -112,12 +112,13 @@ def extract_maldi_tsf_data(
         mz_arr: np.ndarray = tsf_index_to_mz(
             tdf_sdk=tdf_sdk_binary, handle=tsf_cursor.handle, frame_id=sid, indices=index_arr
         )
+        intensity_sum = np.sum(intensity_arr)
 
         for mz, intensity in zip(mz_arr, intensity_arr):
             binned_mz = mz_bins[bisect_left(mz_bins, mz)]
             spectra_dict[binned_mz] = (
                 0 if binned_mz not in spectra_dict else spectra_dict[binned_mz]
-            ) + intensity
+            ) + (intensity / intensity_sum)
 
     run_name = os.path.basename(os.path.splitext(maldi_data_path)[0])
     tsf_spectra: pd.DataFrame = pd.DataFrame(spectra_dict.items(), columns=["m/z", "intensity"])
