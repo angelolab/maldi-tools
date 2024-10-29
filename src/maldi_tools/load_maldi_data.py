@@ -81,7 +81,8 @@ def init_tsf_load_object(
 def extract_maldi_tsf_data(
     maldi_data_path: Union[str, Path],
     min_mz: float = 800,
-    max_mz: float = 4000
+    max_mz: float = 4000,
+    tic_normalize: bool = False
 ) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """Extract the spectra data for a particular MALDI run.
 
@@ -93,6 +94,8 @@ def extract_maldi_tsf_data(
             The minimum m/z value observed during the run
         max_mz (float):
             The maximum m/z value observed during the run
+        tic_normalize (bool):
+            Whether or not to apply TIC normalization, default to False
 
     Returns:
     -------
@@ -112,7 +115,7 @@ def extract_maldi_tsf_data(
         mz_arr: np.ndarray = tsf_index_to_mz(
             tdf_sdk=tdf_sdk_binary, handle=tsf_cursor.handle, frame_id=sid, indices=index_arr
         )
-        intensity_sum = np.sum(intensity_arr)
+        intensity_sum = np.sum(intensity_arr) if tic_normalize else 1
 
         for mz, intensity in zip(mz_arr, intensity_arr):
             binned_mz = mz_bins[bisect_left(mz_bins, mz)]
@@ -135,7 +138,8 @@ def extract_maldi_run_spectra(
     maldi_paths: List[Union[str, Path]],
     min_mz: float = 800,
     max_mz: float = 4000,
-    num_workers: int = 16
+    num_workers: int = 16,
+    tic_normalize: bool = False
 ) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """Extract the full spectra and corresponding poslog information from the MALDI files.
 
@@ -149,6 +153,8 @@ def extract_maldi_run_spectra(
             The maximum m/z value observed during the run
         num_workers (int):
             The number of workers to use for the process, default to all
+        tic_normalize (bool):
+            Whether or not to apply TIC normalization, default to False
 
     Returns:
     -------
@@ -163,7 +169,9 @@ def extract_maldi_run_spectra(
 
     with ProcessPoolExecutor(max_workers=num_workers) as executor:
         future_maldi_data = {
-            executor.submit(extract_maldi_tsf_data, mp, min_mz, max_mz): mp for mp in maldi_paths
+            executor.submit(
+                extract_maldi_tsf_data, mp, min_mz, max_mz, tic_normalize
+            ): mp for mp in maldi_paths
         }
 
         for future in as_completed(future_maldi_data):
