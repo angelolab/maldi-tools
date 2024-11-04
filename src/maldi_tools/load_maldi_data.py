@@ -26,35 +26,32 @@ BASE_PATH = Path(os.path.dirname(os.path.realpath(__file__)))
 
 def generate_mz_bins(
     min_mz: float = 800,
-    max_mz: float = 4000
+    max_mz: float = 4000,
+    num_bins: int = 321889
 ) -> np.ndarray:
     """Given a range of mz values, generate the bins as would be calculated by Bruker's SCiLS.
 
-    To convert from an mz value to its corresponding bin size, use mz_val / 200 / 1000, since the
-    bin sizes are measured in mDa.
+    This is computed using logirathmic binning:
+
+    mz_i = min_mz * (max_mz / min_mz) * (i / (num_bins - 1))
 
     Note that the computed values may be slightly off the SCiLS values, as the latter has floating
     point errors.
 
     Args:
     ----
-        min_mz (float): The minimum mz extracted to start the binning at
-        max_mz (float): The maximum mz extracted to start the binning at
+        min_mz (float):
+            The minimum mz extracted to start the binning at
+        max_mz (float):
+            The maximum mz extracted to start the binning at
+        num_bins (int):
+            The number of bins to extract between `min_mz` and `max_mz`
+
     Returns:
     -------
         np.ndarray: The list of mz values to use for binning the observed mz values.
     """
-    mz_bins: List[float] = [min_mz]
-    while True:
-        mz_right: float = mz_bins[-1] + mz_bins[-1] / 200000
-
-        if mz_right >= max_mz:
-            if mz_bins[-1] != max_mz:
-                mz_bins.append(max_mz)
-            break
-        mz_bins.append(mz_right)
-
-    return np.array(mz_bins)
+    return [min_mz * (max_mz / min_mz) ** (i / (num_bins - 1)) for i in np.arange(num_bins)]
 
 
 def init_tsf_load_object(
@@ -118,9 +115,13 @@ def extract_maldi_tsf_data(
         intensity_sum = np.sum(intensity_arr) if tic_normalize else 1
 
         for mz, intensity in zip(mz_arr, intensity_arr):
-            binned_mz = mz_bins[bisect_left(mz_bins, mz)]
-            spectra_dict[binned_mz] = (
-                0 if binned_mz not in spectra_dict else spectra_dict[binned_mz]
+            mz_bin_index = bisect_left(mz_bins, mz)
+            if mz_bin_index > 0 and mz_bins[mz_bin_index - 1] >= mz:
+                mz_bin_index -= 1
+            mz_bin = mz_bins[mz_bin_index]
+
+            spectra_dict[mz_bin] = (
+                0 if mz_bin not in spectra_dict else spectra_dict[mz_bin]
             ) + (intensity / intensity_sum)
 
     run_name = os.path.basename(os.path.splitext(maldi_data_path)[0])
@@ -138,6 +139,7 @@ def extract_maldi_run_spectra(
     maldi_paths: List[Union[str, Path]],
     min_mz: float = 800,
     max_mz: float = 4000,
+    num_bins: int = 321889,
     num_workers: int = 16,
     tic_normalize: bool = False
 ) -> Tuple[pd.DataFrame, pd.DataFrame]:
@@ -151,6 +153,8 @@ def extract_maldi_run_spectra(
             The minimum m/z value observed during the run
         max_mz (float):
             The maximum m/z value observed during the run
+        num_bins (int):
+            The number of m/z bins to extract between `min_mz` and `max_mz`
         num_workers (int):
             The number of workers to use for the process, default to all
         tic_normalize (bool):
