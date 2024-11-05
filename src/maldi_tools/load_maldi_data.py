@@ -175,6 +175,8 @@ def extract_maldi_run_spectra(
         Tuple[pandas.DataFrame, pandas.DataFrame:
             Two DataFrames containing the spectra and poslog info across all runs respectively
     """
+    if num_bins <= 0:
+        raise ValueError("num_bins specified must be positive")
     if num_workers <= 0:
         raise ValueError("num_workers specified must be positive")
 
