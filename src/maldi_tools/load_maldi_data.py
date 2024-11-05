@@ -49,9 +49,17 @@ def generate_mz_bins(
 
     Returns:
     -------
-        np.ndarray: The list of mz values to use for binning the observed mz values.
+        Tuple[np.ndarray]:
+            The list of mz values to use for defining the central, left, and right points of each bin
     """
-    return [min_mz * (max_mz / min_mz) ** (i / (num_bins - 1)) for i in np.arange(num_bins)]
+    bin_centers = [min_mz * (max_mz / min_mz) ** (i / (num_bins - 1)) for i in np.arange(num_bins)]
+    bin_deltas = [bin_centers[1] - bin_centers[0]] + [
+        (bin_centers[i + 1] - bin_centers[i - 1]) / 2 for i in np.arange(1, num_bins - 1)
+    ] + [bin_centers[-1] - bin_centers[-2]]
+    bin_lefts = [bc - bd / 2 for (bc, bd) in zip(bin_centers, bin_deltas)]
+    bin_rights = [bc + bd / 2 for (bc, bd) in zip(bin_centers, bin_deltas)]
+
+    return bin_centers, bin_lefts, bin_rights
 
 
 def init_tsf_load_object(
@@ -102,7 +110,7 @@ def extract_maldi_tsf_data(
     tdf_sdk_binary: CDLL = init_tdf_sdk_api(os.path.join(BASE_PATH, "timsdata.dll"))
     tsf_cursor: TsfData = init_tsf_load_object(maldi_data_path, tdf_sdk_binary)
 
-    mz_bins: np.ndarray = generate_mz_bins(min_mz, max_mz)
+    mz_bins_centers, mz_bin_lefts, mz_bin_rights = generate_mz_bins(min_mz, max_mz)
     spectra_dict: Dict[float, float] = {}
     tsf_spot_info: pd.DataFrame = tsf_cursor.analysis["Frames"]
     for sid in tsf_spot_info["Id"].values:
@@ -115,10 +123,12 @@ def extract_maldi_tsf_data(
         intensity_sum = np.sum(intensity_arr) if tic_normalize else 1
 
         for mz, intensity in zip(mz_arr, intensity_arr):
-            mz_bin_index = bisect_left(mz_bins, mz)
-            if mz_bin_index > 0 and mz_bins[mz_bin_index - 1] >= mz:
-                mz_bin_index -= 1
-            mz_bin = mz_bins[mz_bin_index]
+            mz_bin_index = bisect_left(mz_bin_rights, mz)
+            if mz_bin_index < len(mz_bin_lefts) and mz_bin_lefts[mz_bin_index] <= mz <= mz_bin_rights[mz_bin_index]:
+                mz_bin = mz_bins_centers[mz_bin_index]
+            else:
+                print(f"Found invalid bin {mz_bin_rights[mz_bin_index]} for mz values {mz}")
+                continue
 
             spectra_dict[mz_bin] = (
                 0 if mz_bin not in spectra_dict else spectra_dict[mz_bin]
