@@ -113,6 +113,9 @@ def extract_maldi_tsf_data(
     mz_bins_centers, mz_bin_lefts, mz_bin_rights = generate_mz_bins(min_mz, max_mz)
     spectra_dict: Dict[float, float] = {}
     tsf_spot_info: pd.DataFrame = tsf_cursor.analysis["Frames"]
+    total_intensity = 0
+    total_intensity_norm = 0
+    num_intensity_vals = 0
     for sid in tsf_spot_info["Id"].values:
         index_arr, intensity_arr = tsf_read_line_spectrum_v2(
             tdf_sdk=tdf_sdk_binary, handle=tsf_cursor.handle, frame_id=sid
@@ -121,6 +124,8 @@ def extract_maldi_tsf_data(
             tdf_sdk=tdf_sdk_binary, handle=tsf_cursor.handle, frame_id=sid, indices=index_arr
         )
         intensity_sum = np.sum(intensity_arr) if tic_normalize else 1
+        total_intensity += intensity_sum
+        num_intensity_vals += len(intensity_arr)
         if intensity_sum == 0:
             continue
 
@@ -135,6 +140,12 @@ def extract_maldi_tsf_data(
             spectra_dict[mz_bin] = (
                 0 if mz_bin not in spectra_dict else spectra_dict[mz_bin]
             ) + (intensity / intensity_sum)
+            total_intensity_norm += (intensity / intensity_sum)
+
+    scaling_factor = (total_intensity / num_intensity_vals) / (total_intensity_norm / num_intensity_vals)
+    if tic_normalize:
+        for mz, intensity in spectra_dict.items():
+            spectra_dict[mz] = intensity * scaling_factor
 
     run_name = os.path.basename(os.path.splitext(maldi_data_path)[0])
     tsf_spectra: pd.DataFrame = pd.DataFrame(spectra_dict.items(), columns=["m/z", "intensity"])
