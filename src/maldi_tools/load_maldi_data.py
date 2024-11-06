@@ -121,6 +121,8 @@ def extract_maldi_tsf_data(
             tdf_sdk=tdf_sdk_binary, handle=tsf_cursor.handle, frame_id=sid, indices=index_arr
         )
         intensity_sum = np.sum(intensity_arr) if tic_normalize else 1
+        if intensity_sum == 0:
+            continue
 
         for mz, intensity in zip(mz_arr, intensity_arr):
             mz_bin_index = bisect_left(mz_bin_rights, mz)
