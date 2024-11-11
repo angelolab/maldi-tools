@@ -185,7 +185,6 @@ def test_map_coordinates_to_core_name(
 def test_map_coordinates_to_core_name_malformed(
     imz_data: ImzMLParser, bad_centroid_path: pathlib.Path, poslog_dir: pathlib.Path
 ):
-    print(bad_centroid_path)
     poslog_paths: List[pathlib.Path] = [poslog_dir / pf for pf in os.listdir(poslog_dir)]
     with pytest.warns(match="Could not find mapping of core Region0"):
         extraction.map_coordinates_to_core_name(imz_data, bad_centroid_path, poslog_paths)
