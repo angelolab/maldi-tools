@@ -433,10 +433,11 @@ def map_coordinates_to_core_name(
         ]
         if region_match.shape[0] == 0:
             core_centroid_distances: pd.Series = np.sqrt(
-                (region_core_info["x"] - center_point["x"]) ** 2
-                + (region_core_info["y"] - center_point["y"]) ** 2
+                np.abs(region_core_info["X"].values - center_point["x"]).astype(float) ** 2
+                + np.abs(region_core_info["Y"].values - center_point["y"]).astype(float) ** 2
             )
-            region_match = region_core_info.iloc[core_centroid_distances.idxmin(), 0]
+
+            region_match = region_core_info.iloc[np.argmin(core_centroid_distances), :]
 
             # TODO: add an error threshold of a few pixels, shouldn't naively map everything
             warnings.warn(
@@ -494,7 +495,7 @@ def load_glycan_crop_masks(glycan_crop_save_dir: Path, cores_to_crop: Optional[L
 
     all_core_masks = remove_file_extensions(list_files(glycan_crop_save_dir, substrs=".tiff"))
     cores = cores_to_crop if cores_to_crop else all_core_masks
-    verify_in_list(specified_cores=cores_to_crop, all_cores=all_core_masks)
+    verify_in_list(specified_cores=cores, all_cores=all_core_masks)
 
     test_mask: np.ndarray = imread(Path(glycan_crop_save_dir) / f"{cores[0]}.tiff")
     glycan_mask: np.ndarray = np.zeros(test_mask.shape, dtype=np.uint8)
