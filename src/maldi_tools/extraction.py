@@ -16,7 +16,6 @@ from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
-import xarray as xr
 from alpineer.image_utils import save_image
 from alpineer.io_utils import list_files, remove_file_extensions, validate_paths
 from alpineer.misc_utils import verify_in_list
@@ -334,8 +333,7 @@ def library_matching(
         or not, the composition name and the mass error if a match was found or not.
     """
     peak_list: List[float] = [
-        float(p.replace("_", "."))
-        for p in remove_file_extensions(list_files(extraction_dir / "float"))
+        float(p.replace("_", ".")) for p in remove_file_extensions(list_files(extraction_dir / "float"))
     ]
     peak_df = pd.DataFrame({"peak": np.array(peak_list)})
     match_fun = partial(_matching_vec, library_peak_df=library_peak_df, ppm=ppm)
