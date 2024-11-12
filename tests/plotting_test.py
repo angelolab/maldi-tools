@@ -85,11 +85,12 @@ def test_save_peak_images(image_xr: xr.DataArray, tmp_path: pathlib.Path):
 def test_save_matched_peak_images(rng: np.random.Generator, image_xr: xr.DataArray, tmp_path: pathlib.Path):
     extraction_dir = tmp_path / "extraction_dir"
     extraction_dir.mkdir(parents=True, exist_ok=True)
+    plotting.save_peak_images(image_xr, extraction_dir)
 
     matched_peaks_df = pd.DataFrame(data={"composition": rng.random(size=(3,))})
 
     plotting.save_matched_peak_images(
-        image_xr=image_xr, matched_peaks_df=matched_peaks_df, extraction_dir=extraction_dir
+        matched_peaks_df=matched_peaks_df, extraction_dir=extraction_dir
     )
 
     for peak in matched_peaks_df.itertuples():
