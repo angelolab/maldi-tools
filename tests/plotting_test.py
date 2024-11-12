@@ -89,9 +89,7 @@ def test_save_matched_peak_images(rng: np.random.Generator, image_xr: xr.DataArr
 
     matched_peaks_df = pd.DataFrame(data={"composition": rng.random(size=(3,))})
 
-    plotting.save_matched_peak_images(
-        matched_peaks_df=matched_peaks_df, extraction_dir=extraction_dir
-    )
+    plotting.save_matched_peak_images(matched_peaks_df=matched_peaks_df, extraction_dir=extraction_dir)
 
     for peak in matched_peaks_df.itertuples():
         # Assert that the float and integer images are saved.

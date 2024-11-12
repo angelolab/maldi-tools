@@ -103,9 +103,7 @@ def test_peak_spectra(
 def test_coordinate_integration(imz_data, peak_widths, tmp_path: pathlib.Path):
     peak_df, *_ = peak_widths
     extraction_dir = tmp_path / "extraction_dir"
-    extraction.coordinate_integration(
-        peak_df=peak_df, imz_data=imz_data, extraction_dir=extraction_dir
-    )
+    extraction.coordinate_integration(peak_df=peak_df, imz_data=imz_data, extraction_dir=extraction_dir)
 
     # Make sure the shape of any given image is correct.
     test_peak_img = list_files(extraction_dir)[0]
@@ -129,7 +127,9 @@ def test__matching_vec(library: pd.DataFrame, obs_mz: int, true_values: pd.Serie
 
 
 @pytest.mark.parametrize(argnames="_ppm", argvalues=[99])
-def test_library_matching(library: pd.DataFrame, _ppm: int, tmp_path: pathlib.Path):
+def test_library_matching(
+    library: pd.DataFrame, _ppm: image_xr: xr.DataArray, int, tmp_path: pathlib.Path
+):
     extraction_dir = tmp_path / "extraction_dir"
     extraction_dir.mkdir(parents=True, exist_ok=True)
     plotting.save_peak_images(image_xr, extraction_dir)
