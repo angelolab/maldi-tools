@@ -12,11 +12,12 @@ import warnings
 from functools import partial
 from operator import itemgetter
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
 import xarray as xr
+from alpineer.image_utils import save_image
 from alpineer.io_utils import list_files, remove_file_extensions, validate_paths
 from alpineer.misc_utils import verify_in_list
 from pyimzml.ImzMLParser import ImzMLParser
@@ -78,7 +79,7 @@ def rolling_window(
         total_mass_df (pd.DataFrame): A dataframe containing all the masses and their
             relative intensities.
         intensity_percentile (int): The intensity for the quantile calculation.
-        window_size (int, optional): The sizve of the window for the rolling window method.
+        window_size (int): The sizve of the window for the rolling window method.
             Defaults to 5000.
 
     Returns:
@@ -278,8 +279,8 @@ def coordinate_integration(peak_df: pd.DataFrame, imz_data: ImzMLParser, extract
                 np.uint32
             )
             img_name: str = f"{peak:.4f}".replace(".", "_")
-            image_utils.save_image(fname=extraction_dir / "float" / f"{img_name}.tiff", data=peak_img_float)
-            image_utils.save_image(fname=extraction_dir / "int" / f"{img_name}.tiff", data=peak_img_int)
+            save_image(fname=extraction_dir / "float" / f"{img_name}.tiff", data=peak_img_float)
+            save_image(fname=extraction_dir / "int" / f"{img_name}.tiff", data=peak_img_int)
 
 
 def _matching_vec(obs_mz: pd.Series, library_peak_df: pd.DataFrame, ppm: int) -> pd.Series:
@@ -325,7 +326,7 @@ def library_matching(
         ppm (int): The ppm for an acceptable mass error range between the observed mass and any target
         mass in the library.
         extraction_dir (Path): The directory to save extracted data in.
-        adducts (bool, optional): Add adducts together. Defaults to False. (Not implemented feature)
+        adducts (bool): Add adducts together. Defaults to False. (Not implemented feature)
 
     Returns:
     -------
@@ -334,7 +335,7 @@ def library_matching(
     """
     peak_list: List[float] = [
         float(p.replace("_", "."))
-        for p in io_utils.remove_file_extensions(io_utils.list_files(extraction_dir / "float"))
+        for p in remove_file_extensions(list_files(extraction_dir / "float"))
     ]
     peak_df = pd.DataFrame({"peak": np.array(peak_list)})
     match_fun = partial(_matching_vec, library_peak_df=library_peak_df, ppm=ppm)
