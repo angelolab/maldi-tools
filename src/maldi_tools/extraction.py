@@ -6,7 +6,9 @@ to the user supplied library.
 
 """
 
+import json
 import os
+import warnings
 from functools import partial
 from operator import itemgetter
 from pathlib import Path
@@ -14,18 +16,21 @@ from typing import Dict, List, Tuple
 
 import numpy as np
 import pandas as pd
-from alpineer import image_utils, io_utils
+import xarray as xr
+from alpineer.io_utils import list_files, remove_file_extensions, validate_paths
+from alpineer.misc_utils import verify_in_list
 from pyimzml.ImzMLParser import ImzMLParser
 from scipy import signal
+from skimage.io import imread, imsave
 from tqdm.notebook import tqdm
 
 from maldi_tools import plotting
 
 
-def extract_spectra(imz_data: ImzMLParser, intensity_percentile: int) -> tuple[pd.DataFrame, np.ndarray]:
-    """Iterates over all coordinates after opening the `imzML` data and extracts all masses, and sums the
-    intensities for all masses. Creates an intensity image, thresholded on `intensity_percentile` with
-    `np.percentile`. The masses are then sorted.
+def extract_spectra(imz_data: ImzMLParser, intensity_percentile: int) -> Tuple[pd.DataFrame, np.ndarray]:
+    """Iterates over all coordinates after opening the `imzML` data and extracts all masses,
+    and sums the intensities for all masses. Creates an intensity image, thresholded on
+    `intensity_percentile` with `np.percentile`. The masses are then sorted.
 
     Args:
     ----
@@ -34,9 +39,9 @@ def extract_spectra(imz_data: ImzMLParser, intensity_percentile: int) -> tuple[p
 
     Returns:
     -------
-        tuple[pd.DataFrame, np.ndarray]: A tuple where the first element is the dataframe containing
-        the total masses and their intensities, and the second element is the thresholds matrix of the
-        image.
+        Tuple[pd.DataFrame, np.ndarray]: A tuple where the first element is the dataframe containing
+        the total masses and their intensities, and the second element is the thresholds matrix
+        of the image.
     """
     imz_coordinates: list = imz_data.coordinates
 
@@ -65,19 +70,21 @@ def extract_spectra(imz_data: ImzMLParser, intensity_percentile: int) -> tuple[p
 
 def rolling_window(
     total_mass_df: pd.DataFrame, intensity_percentile: int, window_size: int = 5000
-) -> tuple[np.ndarray, np.ndarray]:
+) -> Tuple[np.ndarray, np.ndarray]:
     """Computes the rolling window log intensities and the rolling window log intensity percentiles.
 
     Args:
     ----
-        total_mass_df (pd.DataFrame): A dataframe containing all the masses and their relative intensities.
+        total_mass_df (pd.DataFrame): A dataframe containing all the masses and their
+            relative intensities.
         intensity_percentile (int): The intensity for the quantile calculation.
-        window_size (int, optional): The sizve of the window for the rolling window method. Defaults to 5000.
+        window_size (int, optional): The sizve of the window for the rolling window method.
+            Defaults to 5000.
 
     Returns:
     -------
-        tuple[np.ndarray, np.ndarray]: A tuple where the first element is the log intensities, and the second
-        element is the log intensity percentiles.
+        Tuple[np.ndarray, np.ndarray]: A tuple where the first element is the log intensities,
+            and the second element is the log intensity percentiles.
     """
     plt_range_min_ind: int = 0
     plt_range_max_ind: int = len(total_mass_df["intensity"]) - 1
@@ -101,13 +108,14 @@ def signal_extraction(
 
     Args:
     ----
-        total_mass_df (pd.DataFrame): A dataframe containing all the masses and their relative intensities.
+        total_mass_df (pd.DataFrame): A dataframe containing all the masses and their
+            relative intensities.
         log_int_percentile (np.ndarray): An array for the log intensity percentiles.
 
     Returns:
     -------
-        tuple[np.ndarray, np.ndarray]: A tuple where the first element is the peak candidate indexes, and
-        the second is the candidate peaks.
+        tuple[np.ndarray, np.ndarray]: A tuple where the first element is the peak candidate
+            indexes, and the second is the candidate peaks.
     """
     peak_candidate_indexes, _peak_properties = signal.find_peaks(
         total_mass_df["intensity"].values, prominence=np.exp(log_int_percentile)
@@ -128,17 +136,18 @@ def get_peak_widths(
 
     Args:
     ----
-        total_mass_df (pd.DataFrame): A dataframe containing all the masses and their relative intensities.
+        total_mass_df (pd.DataFrame): A dataframe containing all the masses and their
+            relative intensities.
         peak_candidate_idxs (np.ndarray): A list containing the indexes of the discovered peaks.
         peak_candidates (np.ndarray): A list containing the discovered peaks.
         thresholds (np.ndarray): The threshold matrix of the image.
 
     Returns:
     -------
-        tuple[pd.DataFrame, np.ndarray, np.ndarray, np.ndarray]: A tuple where the first element is a
-        DataFrame of the unique peaks discovered from the signal extraction process. The second and third
-        elements are the lower and upper bounds, and the fourth element is the height of the contour lines
-        at which the peak widths were calculated from.
+        tuple[pd.DataFrame, np.ndarray, np.ndarray, np.ndarray]: A tuple where the first element is
+            a DataFrame of the unique peaks discovered from the signal extraction process.
+            The second and third elements are the lower and upper bounds, and the fourth element is
+            the height of the contour lines at which the peak widths were calculated from.
     """
     plt_range_min_ind: int = 0
     plt_range_max_ind: int = len(total_mass_df["intensity"]) - 1
@@ -274,8 +283,8 @@ def coordinate_integration(peak_df: pd.DataFrame, imz_data: ImzMLParser, extract
 
 
 def _matching_vec(obs_mz: pd.Series, library_peak_df: pd.DataFrame, ppm: int) -> pd.Series:
-    """Finds the first matching mass in the target library for each observed mass if it exists within a
-    tolerance determined by ppm.
+    """Finds the matching mass with the lowest mass error in the target library
+    for each observed mass if it exists within a tolerance determined by ppm.
 
     Args:
     ----
@@ -289,14 +298,16 @@ def _matching_vec(obs_mz: pd.Series, library_peak_df: pd.DataFrame, ppm: int) ->
         pd.Series: A series containing the library mass, a boolean if a match is discovered, the composition,
         and the error mass error value.
     """
+    min_matching_mass_data = [np.nan, False, np.nan, np.nan]
     for row in library_peak_df.itertuples():
         lib_mz = row.mz
         mass_error = np.absolute((1 - lib_mz / obs_mz) * 1e6)
         if mass_error <= ppm:
-            return pd.Series([lib_mz, True, row.composition, mass_error])
+            if np.isnan(min_matching_mass_data[3]) or mass_error < min_matching_mass_data[3]:
+                min_matching_mass_data = [lib_mz, True, row.composition, mass_error]
         else:
             continue
-    return pd.Series([np.nan, False, np.nan, np.nan])
+    return pd.Series(min_matching_mass_data)
 
 
 def library_matching(
@@ -338,3 +349,162 @@ def library_matching(
     peak_df.to_csv(lib_matched_dir / "matched_peaks.csv")
 
     return peak_df
+
+
+def generate_glycan_mask(
+    imz_data: ImzMLParser,
+    glycan_img_path: Path,
+    glycan_mask_path: Path,
+):
+    """Given a glycan image, generates an equivalent mask.
+
+    Args:
+    ---
+        imz_data (ImzMLParser): The imzML object, needed for coordinate identification.
+        glycan_img_path (Path): Location of the .png file containing the glycan scan
+        glycan_mask_path (Path): Location where the mask will be saved
+    """
+    validate_paths([glycan_img_path])
+
+    glycan_img: np.ndarray = imread(glycan_img_path)
+    glycan_mask: np.ndarray = np.zeros(glycan_img.shape, dtype=np.uint8)
+
+    coords: np.ndarray = np.array([coord[:2] for coord in imz_data.coordinates])
+    glycan_mask[coords[:, 1] - 1, coords[:, 0] - 1] = 255
+    imsave(glycan_mask_path, glycan_mask)
+
+
+def map_coordinates_to_core_name(
+    imz_data: ImzMLParser,
+    centroid_path: Path,
+    poslog_paths: List[Path],
+):
+    """Maps each scanned coordinate on a slide to their respective core name (created by TSAI tiler).
+
+    Args:
+    ---
+        imz_data (ImzMLParser): The imzML object, needed for coordinate identification.
+        centroid_path (Path): A JSON file mapping each core name to their respective centroid.
+            Generated by the TSAI tiler.
+        poslog_paths (List[Path]): A list of .txt files listing all the coordinates scanned,
+            needed to map coordinates to their respective core. They must be specified
+            in the order of extraction.
+
+    Returns:
+    -------
+        pd.DataFrame:
+            Maps each coordinate to their core
+    """
+    validate_paths([centroid_path] + poslog_paths)
+
+    coords: np.ndarray = np.array([coord[:2] for coord in imz_data.coordinates])
+    region_core_info: pd.DataFrame = pd.DataFrame(columns=["Region", "X", "Y"])
+    coord_index: int = 0
+    num_regions: int = 0
+
+    for poslog_path in poslog_paths:
+        region_core_sub: pd.DataFrame = pd.read_csv(
+            poslog_path,
+            delimiter=" ",
+            names=["Date", "Time", "Region", "PosX", "PosY", "X", "Y", "Z"],
+            usecols=["Region", "X", "Y"],
+            index_col=False,
+            skiprows=1,
+        )
+        region_core_sub = region_core_sub[region_core_sub["Region"] != "__"].copy()
+        extracted: pd.Series = (
+            region_core_sub["Region"].str.extract(r"R(\d+)X", expand=False).astype(int) + num_regions
+        )
+        region_core_sub["Region"] = extracted
+
+        coords_subset: np.ndarray = coords[coord_index : (coord_index + region_core_sub.shape[0]), :]
+        region_core_sub[["X", "Y"]] = coords_subset
+        region_core_info = pd.concat([region_core_info, region_core_sub])
+
+        coord_index += region_core_sub.shape[0]
+        num_regions += len(region_core_sub["Region"].unique())
+
+    with open(centroid_path, "r") as infile:
+        centroid_data: dict = json.load(infile)
+
+    core_region_mapping: dict = {}
+    for core in centroid_data["fovs"]:
+        center_point: dict = core["centerPointPixels"]
+        region_match: pd.Series = region_core_info.loc[
+            (region_core_info["X"] == center_point["x"]) & (region_core_info["Y"] == center_point["y"]),
+            "Region",
+        ]
+        if region_match.shape[0] == 0:
+            core_centroid_distances: pd.Series = np.sqrt(
+                np.abs(region_core_info["X"].values - center_point["x"]).astype(float) ** 2
+                + np.abs(region_core_info["Y"].values - center_point["y"]).astype(float) ** 2
+            )
+
+            region_match = region_core_info.iloc[np.argmin(core_centroid_distances), :]
+
+            # TODO: add an error threshold of a few pixels, shouldn't naively map everything
+            warnings.warn(
+                f"Could not find mapping of core {core['name']} to any location on the slide, "
+                "please verify that you positioned the central point of the core correctly "
+                "using the TSAI tiler, or that you've set the right poslog file.\n\n"
+                f"The closest region to the core's centroid is {region_match.values[0]}, "
+                "using this as finalized mapping."
+            )
+
+        core_region_mapping[region_match.values[0]] = core["name"]
+
+    region_core_info[["Region", "X", "Y"]] = region_core_info[["Region", "X", "Y"]].astype(int)
+    region_core_info["Core"] = region_core_info["Region"].map(core_region_mapping)
+    return region_core_info
+
+
+def generate_glycan_crop_masks(
+    glycan_mask_path: Path,
+    region_core_info: pd.DataFrame,
+    glycan_crop_save_dir: Path,
+):
+    """Generates and saves masks for each core in `region_core_info` for cropping purposes.
+
+    Args:
+    ---
+        glycan_mask_path (Path): The path to the glycan mask .tiff, needed to create the cropped mask.
+        region_core_info (pd.DataFrame): Defines the coordinates associated with each FOV.
+        glycan_crop_save_dir (Path): The directory to save the glycan crop masks.
+    """
+    validate_paths([glycan_mask_path])
+    glycan_mask: np.ndarray = imread(glycan_mask_path)
+
+    for core in region_core_info["Core"].unique():
+        core_cropped_mask: np.ndarray = np.zeros(glycan_mask.shape, dtype=np.uint8)
+        coords: np.ndarray = region_core_info.loc[region_core_info["Core"] == core, ["X", "Y"]].values
+        core_cropped_mask[coords[:, 1] - 1, coords[:, 0] - 1] = 255
+        imsave(Path(glycan_crop_save_dir) / f"{core}.tiff", core_cropped_mask)
+
+
+def load_glycan_crop_masks(glycan_crop_save_dir: Path, cores_to_crop: Optional[List[str]] = None):
+    """Generate a mask for cropping out the specified cores.
+
+    Args:
+    ---
+        glycan_crop_save_dir (Path): The directory containing the glycan crop mask for each individual core.
+        cores_to_crop (Optional[List[str]]): Which cores to segment out. If None, use all.
+
+    Returns:
+    -------
+        np.ndarray:
+            The binary segmentation mask of the glycan image
+    """
+    validate_paths([glycan_crop_save_dir])
+
+    all_core_masks = remove_file_extensions(list_files(glycan_crop_save_dir, substrs=".tiff"))
+    cores = cores_to_crop if cores_to_crop else all_core_masks
+    verify_in_list(specified_cores=cores, all_cores=all_core_masks)
+
+    test_mask: np.ndarray = imread(Path(glycan_crop_save_dir) / f"{cores[0]}.tiff")
+    glycan_mask: np.ndarray = np.zeros(test_mask.shape, dtype=np.uint8)
+
+    for core in cores:
+        core_mask: np.ndarray = imread(Path(glycan_crop_save_dir) / f"{core}.tiff")
+        glycan_mask += core_mask
+
+    return glycan_mask

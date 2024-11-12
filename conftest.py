@@ -1,11 +1,14 @@
 """Shared Fixtures for tests."""
 
+import json
+import os
 from pathlib import Path
-from typing import Generator
+from typing import Generator, List
 
 import numpy as np
 import pandas as pd
 import pytest
+import skimage.io as io
 import xarray as xr
 from pyimzml.ImzMLParser import ImzMLParser
 from pyimzml.ImzMLWriter import ImzMLWriter
@@ -26,7 +29,8 @@ def imz_data(tmp_path_factory: TempPathFactory, rng: np.random.Generator) -> Imz
     img_dim: int = 10
 
     # Generate random integers n for each coordinate (10 x 10). These will be used for creating
-    # random m/z and intensity values of length n. Lengths n are distributed along the standard gamma.
+    # random m/z and intensity values of length n.
+    # Lengths n are distributed along the standard gamma.
     ns: np.ndarray = np.rint(rng.standard_gamma(shape=2.5, size=(img_dim**2)) * 100).astype(int)
 
     # Generate random masses and sample different amounts of them, so we get duplicates
@@ -114,3 +118,111 @@ def image_xr(rng: np.random.Generator, library: pd.DataFrame) -> Generator[xr.Da
         dims=["peak", "x", "y"],
     )
     yield img_xr
+
+
+@pytest.fixture(scope="session")
+def glycan_img_path(
+    tmp_path_factory: TempPathFactory, imz_data: ImzMLParser, rng: np.random.Generator
+) -> Generator[Path, None, None]:
+    coords: np.ndarray = np.array([coord[:2] for coord in imz_data.coordinates])
+
+    glycan_img: np.ndarray = np.zeros((10, 10))
+    glycan_img[coords[:, 1] - 1, coords[:, 0] - 1] = rng.random(coords.shape[0])
+
+    glycan_img_file: Path = tmp_path_factory.mktemp("glycan_imgs") / "glycan_img.tiff"
+    io.imsave(glycan_img_file, glycan_img)
+
+    yield glycan_img_file
+
+
+@pytest.fixture(scope="session")
+def poslog_dir(
+    tmp_path_factory: TempPathFactory, imz_data: ImzMLParser, rng: np.random.Generator
+) -> Generator[Path, None, None]:
+    columns_write: List[str] = ["Date", "Time", "Region", "PosX", "PosY", "X", "Y", "Z"]
+    poslog_base_dir: Path = tmp_path_factory.mktemp("poslogs")
+
+    for i in np.arange(2):
+        poslog_data: pd.DataFrame = pd.DataFrame(
+            rng.random(size=(int(len(imz_data.coordinates) / 2) + 2, len(columns_write))),
+            columns=columns_write,
+        )
+
+        poslog_regions: List[str] = []
+        for j in np.arange(2):
+            poslog_regions.append("__")
+            poslog_regions.extend([f"R{j}XY"] * 25)
+        poslog_data["Region"] = poslog_regions
+
+        poslog_file: Path = poslog_base_dir / f"poslog{i}.txt"
+        poslog_data.to_csv(poslog_file, header=None, index=False, sep=" ", mode="w", columns=columns_write)
+
+    yield poslog_base_dir
+
+
+@pytest.fixture(scope="session")
+def centroid_path(tmp_path_factory: TempPathFactory, imz_data: ImzMLParser) -> Generator[Path, None, None]:
+    coords: np.ndarray = np.array([coord[:2] for coord in imz_data.coordinates])
+    center_coord_indices: np.ndarray = np.arange(10, coords.shape[0], 25)
+
+    centroid_data: dict = {}
+    centroid_data["exportDateTime"] = None
+    centroid_data["fovs"] = []
+    for i, cci in enumerate(center_coord_indices):
+        center_coord = coords[cci, :]
+        center_point_data = {
+            "name": f"Region{i}",
+            "centerPointPixels": {"x": center_coord[0].item(), "y": center_coord[1].item()},
+        }
+        centroid_data["fovs"].append(center_point_data)
+
+    centroid_file: Path = tmp_path_factory.mktemp("centroids") / "centroids.json"
+    with open(centroid_file, "w") as outfile:
+        outfile.write(json.dumps(centroid_data))
+
+    yield centroid_file
+
+
+@pytest.fixture(scope="session")
+def bad_centroid_path(
+    tmp_path_factory: TempPathFactory, imz_data: ImzMLParser
+) -> Generator[Path, None, None]:
+    coords: np.ndarray = np.array([coord[:2] for coord in imz_data.coordinates])
+    center_coord_indices: np.ndarray = np.arange(10, coords.shape[0], 25)
+
+    centroid_data: dict = {}
+    centroid_data["exportDateTime"] = None
+    centroid_data["fovs"] = []
+    for i, cci in enumerate(center_coord_indices):
+        center_coord = coords[cci, :]
+        center_point_data = {
+            "name": f"Region{i}",
+            "centerPointPixels": {"x": center_coord[0].item() + 10000, "y": center_coord[1].item() + 10000},
+        }
+        centroid_data["fovs"].append(center_point_data)
+
+    centroid_file: Path = tmp_path_factory.mktemp("centroids") / "centroids.json"
+    with open(centroid_file, "w") as outfile:
+        outfile.write(json.dumps(centroid_data))
+
+    yield centroid_file
+
+
+@pytest.fixture(scope="session")
+def region_core_info(imz_data: ImzMLParser, centroid_path: Path, poslog_dir: Path) -> pd.DataFrame:
+    poslog_paths: List[Path] = [poslog_dir / pf for pf in os.listdir(poslog_dir)]
+    region_core_info: pd.DataFrame = extraction.map_coordinates_to_core_name(
+        imz_data, centroid_path, poslog_paths
+    )
+
+    yield region_core_info
+
+
+@pytest.fixture(scope="session")
+def glycan_crop_save_dir(
+    tmp_path_factory: TempPathFactory, glycan_img_path: Path, region_core_info: pd.DataFrame
+) -> Generator[Path, None, None]:
+    glycan_crop_save_dir: Path = tmp_path_factory.mktemp("glycan_crops")
+    extraction.generate_glycan_crop_masks(glycan_img_path, region_core_info, glycan_crop_save_dir)
+
+    yield glycan_crop_save_dir
