@@ -128,7 +128,7 @@ def test__matching_vec(library: pd.DataFrame, obs_mz: int, true_values: pd.Serie
 
 @pytest.mark.parametrize(argnames="_ppm", argvalues=[99])
 def test_library_matching(
-    library: pd.DataFrame, _ppm: image_xr: xr.DataArray, int, tmp_path: pathlib.Path
+    library: pd.DataFrame, image_xr: xr.DataArray, _ppm: int, tmp_path: pathlib.Path
 ):
     extraction_dir = tmp_path / "extraction_dir"
     extraction_dir.mkdir(parents=True, exist_ok=True)
