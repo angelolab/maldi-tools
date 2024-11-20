@@ -253,9 +253,6 @@ def coordinate_integration(peak_df: pd.DataFrame, imz_data: ImzMLParser, extract
         imz_data (ImzMLParser): The imzML object.
         extraction_dir (Path): The directory to save extracted data (peak images) in.
     """
-    unique_peaks = peak_df["peak"].unique()
-    peak_dict = dict(zip(unique_peaks, np.arange((len(unique_peaks)))))
-
     imz_coordinates: list = imz_data.coordinates
 
     x_size: int = max(imz_coordinates, key=itemgetter(0))[0]
@@ -272,19 +269,18 @@ def coordinate_integration(peak_df: pd.DataFrame, imz_data: ImzMLParser, extract
 
         for i_idx, peak in peak_df.loc[peak_df["m/z"].isin(mzs), "peak"].reset_index(drop=True).items():
             img_name: str = f"{peak:.4f}".replace(".", "_")
-            if os.path.exists(extraction_dir / "float" / f"{img_name}.tiff"):
-                peak_img = imread(extraction_dir / "float" / f"{img_name}.tiff")
-            else:
-                peak_img: np.ndarray = np.zeros(image_shape)
+            float_peak_path: Path = extraction_dir / "float" / f"{img_name}.tiff"
+            int_peak_path: Path = extraction_dir / "int" / f"{img_name}.tiff"
+            peak_exists: bool = os.path.exists(float_peak_path)
+            peak_img: np.ndarray = imread(float_peak_path).T if peak_exists else np.zeros(image_shape)
 
             peak_img[x - 1, y - 1] += intensity[i_idx]
             peak_img_float: np.ndarray = peak_img.T
             peak_img_int: np.ndarray = (peak_img_float * (2**32 - 1) / np.max(peak_img_float)).astype(
                 np.uint32
             )
-            img_name: str = f"{peak:.4f}".replace(".", "_")
-            save_image(fname=extraction_dir / "float" / f"{img_name}.tiff", data=peak_img_float)
-            save_image(fname=extraction_dir / "int" / f"{img_name}.tiff", data=peak_img_int)
+            save_image(fname=float_peak_path, data=peak_img_float)
+            save_image(fname=int_peak_path, data=peak_img_int)
 
 
 def _matching_vec(obs_mz: pd.Series, library_peak_df: pd.DataFrame, ppm: int) -> pd.Series:

@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 import pytest
 import xarray as xr
-from alpineer.io_utils import list_files, list_folders, remove_file_extensions
+from alpineer.io_utils import list_files, remove_file_extensions
 from alpineer.misc_utils import verify_same_elements
 from pyimzml.ImzMLParser import ImzMLParser
 from pytest import TempPathFactory
@@ -104,15 +104,13 @@ def test_coordinate_integration(
     imz_data_coord_int: ImzMLParser,
     peak_widths_coord_int: pd.DataFrame,
     image_xr: xr.DataArray,
-    tmp_path: pathlib.Path
+    tmp_path: pathlib.Path,
 ):
     # peak_df, *_ = peak_widths
     extraction_dir = tmp_path / "extraction_dir"
 
     extraction.coordinate_integration(
-        peak_df=peak_widths_coord_int,
-        imz_data=imz_data_coord_int,
-        extraction_dir=extraction_dir
+        peak_df=peak_widths_coord_int, imz_data=imz_data_coord_int, extraction_dir=extraction_dir
     )
 
     # Make sure the shape of any given image is correct for both float and int

@@ -87,10 +87,7 @@ def imz_data_coord_int(tmp_path_factory: TempPathFactory, rng: np.random.Generat
 def total_mass_df(rng: np.random.Generator) -> pd.DataFrame:
     mz_count: int = 10000
     df = pd.DataFrame(
-        data={
-            "m/z": np.linspace(start=1, stop=101, num=mz_count),
-            "intensity": rng.random(size=mz_count)
-        }
+        data={"m/z": np.linspace(start=1, stop=101, num=mz_count), "intensity": rng.random(size=mz_count)}
     )
     yield df
 
