@@ -87,11 +87,41 @@ def test_save_matched_peak_images(rng: np.random.Generator, image_xr: xr.DataArr
     extraction_dir.mkdir(parents=True, exist_ok=True)
     plotting.save_peak_images(image_xr, extraction_dir)
 
-    matched_peaks_df = pd.DataFrame(data={"composition": rng.random(size=(3,))})
+    peaks = image_xr.peak.values
+    img_shape = (image_xr.shape[1], image_xr.shape[2])
+    matched = [False] * len(peaks)
+    matched[-1] = True
+    composition = [np.nan] * len(peaks)
+    composition[-1] = rng.random(size=(1,))
+    mass_error = [np.nan] * len(peaks)
+    mass_error[-1] = rng.random(size=(1,))
+    matched_peaks_df = pd.DataFrame(
+        data={
+            "lib_mz": peaks,
+            "matched": matched,
+            "composition": composition,
+            "mass_error": mass_error,
+        }
+    )
 
     plotting.save_matched_peak_images(matched_peaks_df=matched_peaks_df, extraction_dir=extraction_dir)
 
     for peak in matched_peaks_df.itertuples():
-        # Assert that the float and integer images are saved.
-        assert os.path.exists(extraction_dir / "library_matched" / "float" / f"{peak.composition}.tiff")
-        assert os.path.exists(extraction_dir / "library_matched" / "int" / f"{peak.composition}.tiff")
+        float_peak_path = extraction_dir / "library_matched" / "float" / f"{peak.composition}.tiff"
+        int_peak_path = extraction_dir / "library_matched" / "int" / f"{peak.composition}.tiff"
+
+        # Assert that the float and integer images are saved for all matched peaks.
+        # Check that the peak images match the desired shape
+        if peak.matched is True:
+            assert os.path.exists(float_peak_path)
+            assert os.path.exists(int_peak_path)
+
+            matched_float_img = imread(float_peak_path)
+            matched_int_img = imread(int_peak_path)
+
+            assert matched_float_img.shape == img_shape
+            assert matched_int_img.shape == img_shape
+        # Otherwise, ensure peaks are not saved
+        else:
+            assert not os.path.exists(float_peak_path)
+            assert not os.path.exists(int_peak_path)

@@ -193,18 +193,16 @@ def save_matched_peak_images(
     matched_peaks_df_filtered: pd.DataFrame = matched_peaks_df.dropna()
 
     for row in tqdm(matched_peaks_df_filtered.itertuples(), total=len(matched_peaks_df_filtered)):
-        # load in the corresponding float and integer images
-        float_img: np.ndarray = io.imread(
-            extraction_dir / "float" / f"{str(row.lib_mz).replace('.', '_')}.tiff"
-        )
-        integer_img: np.ndarray = io.imread(
-            extraction_dir / "int" / f"{str(row.lib_mz).replace('.', '_')}.tiff"
-        )
+        if row.matched is True:
+            peak_file_name: str = f"{row.lib_mz:.4f}".replace(".", "_") + ".tiff"
+            # load in the corresponding float and integer images
+            float_img: np.ndarray = io.imread(extraction_dir / "float" / peak_file_name)
+            integer_img: np.ndarray = io.imread(extraction_dir / "int" / peak_file_name)
 
-        img_name: str = row.composition
+            img_name: str = row.composition
 
-        # save floating point image
-        image_utils.save_image(fname=float_dir / f"{img_name}.tiff", data=float_img)
+            # save floating point image
+            image_utils.save_image(fname=float_dir / f"{img_name}.tiff", data=float_img)
 
-        # save integer image
-        image_utils.save_image(fname=int_dir / f"{img_name}.tiff", data=integer_img)
+            # save integer image
+            image_utils.save_image(fname=int_dir / f"{img_name}.tiff", data=integer_img)
