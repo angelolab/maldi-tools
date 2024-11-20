@@ -254,7 +254,7 @@ def coordinate_integration(peak_df: pd.DataFrame, imz_data: ImzMLParser, extract
         extraction_dir (Path): The directory to save extracted data (peak images) in.
     """
     unique_peaks = peak_df["peak"].unique()
-    dict(zip(unique_peaks, np.arange((len(unique_peaks)))))
+    peak_dict = dict(zip(unique_peaks, np.arange((len(unique_peaks)))))
 
     imz_coordinates: list = imz_data.coordinates
 
@@ -267,11 +267,16 @@ def coordinate_integration(peak_df: pd.DataFrame, imz_data: ImzMLParser, extract
     os.makedirs(extraction_dir / "int")
 
     for idx, (x, y, _) in tqdm(enumerate(imz_data.coordinates), total=len(imz_data.coordinates)):
-        peak_img: np.ndarray = np.zeros((1, *image_shape))
         mzs, intensities = imz_data.getspectrum(idx)
         intensity: np.ndarray = intensities[np.isin(mzs, peak_df["m/z"])]
 
         for i_idx, peak in peak_df.loc[peak_df["m/z"].isin(mzs), "peak"].reset_index(drop=True).items():
+            img_name: str = f"{peak:.4f}".replace(".", "_")
+            if os.path.exists(extraction_dir / "float" / f"{img_name}.tiff"):
+                peak_img = imread(extraction_dir / "float" / f"{img_name}.tiff")
+            else:
+                peak_img: np.ndarray = np.zeros(image_shape)
+
             peak_img[x - 1, y - 1] += intensity[i_idx]
             peak_img_float: np.ndarray = peak_img.T
             peak_img_int: np.ndarray = (peak_img_float * (2**32 - 1) / np.max(peak_img_float)).astype(
