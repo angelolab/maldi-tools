@@ -337,7 +337,7 @@ def library_matching(
         or not, the composition name and the mass error if a match was found or not.
     """
     peak_list: List[float] = [
-        float(p.replace("_", ".")) for p in remove_file_extensions(list_files(extraction_dir / "float"))
+        float(p.replace("_", ".")) for p in remove_file_extensions(list_files(Path(extraction_dir) / "float"))
     ]
     peak_df = pd.DataFrame({"peak": np.array(peak_list)})
     match_fun = partial(_matching_vec, library_peak_df=library_peak_df, ppm=ppm)
