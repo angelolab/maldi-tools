@@ -260,8 +260,10 @@ def coordinate_integration(peak_df: pd.DataFrame, imz_data: ImzMLParser, extract
 
     image_shape: Tuple[int, int] = (x_size, y_size)
 
-    os.makedirs(extraction_dir / "float")
-    os.makedirs(extraction_dir / "int")
+    float_peak_dir: Path = Path(extraction_dir) / "float"
+    int_peak_dir: Path = Path(extraction_dir) / "int"
+    os.makedirs(float_peak_dir)
+    os.makedirs(int_peak_dir)
 
     for idx, (x, y, _) in tqdm(enumerate(imz_data.coordinates), total=len(imz_data.coordinates)):
         mzs, intensities = imz_data.getspectrum(idx)
@@ -269,8 +271,8 @@ def coordinate_integration(peak_df: pd.DataFrame, imz_data: ImzMLParser, extract
 
         for i_idx, peak in peak_df.loc[peak_df["m/z"].isin(mzs), "peak"].reset_index(drop=True).items():
             img_name: str = f"{peak:.4f}".replace(".", "_")
-            float_peak_path: Path = extraction_dir / "float" / f"{img_name}.tiff"
-            int_peak_path: Path = extraction_dir / "int" / f"{img_name}.tiff"
+            float_peak_path: Path = float_peak_dir / f"{img_name}.tiff"
+            int_peak_path: Path = int_peak_dir / f"{img_name}.tiff"
             peak_exists: bool = os.path.exists(float_peak_path)
             peak_img: np.ndarray = imread(float_peak_path).T if peak_exists else np.zeros(image_shape)
 

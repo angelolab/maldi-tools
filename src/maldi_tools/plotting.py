@@ -184,8 +184,8 @@ def save_matched_peak_images(
         extraction_dir (Path): The directory to save extracted data in.
     """
     # Create image directories if they do not exist
-    float_dir: Path = extraction_dir / "library_matched" / "float"
-    int_dir: Path = extraction_dir / "library_matched" / "int"
+    float_dir: Path = Path(extraction_dir) / "library_matched" / "float"
+    int_dir: Path = Path(extraction_dir) / "library_matched" / "int"
     for img_dir in [float_dir, int_dir]:
         if not os.path.exists(img_dir):
             img_dir.mkdir(parents=True, exist_ok=True)
@@ -196,8 +196,8 @@ def save_matched_peak_images(
         if row.matched is True:
             peak_file_name: str = f"{row.lib_mz:.4f}".replace(".", "_") + ".tiff"
             # load in the corresponding float and integer images
-            float_img: np.ndarray = io.imread(extraction_dir / "float" / peak_file_name)
-            integer_img: np.ndarray = io.imread(extraction_dir / "int" / peak_file_name)
+            float_img: np.ndarray = io.imread(Path(extraction_dir) / "float" / peak_file_name)
+            integer_img: np.ndarray = io.imread(Path(extraction_dir) / "int" / peak_file_name)
 
             img_name: str = row.composition
 
