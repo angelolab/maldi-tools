@@ -3,7 +3,7 @@
 import json
 import os
 from pathlib import Path
-from typing import Generator, List
+from typing import Generator, List, Tuple
 
 import numpy as np
 import pandas as pd
@@ -54,6 +54,36 @@ def imz_data(tmp_path_factory: TempPathFactory, rng: np.random.Generator) -> Imz
 
 
 @pytest.fixture(scope="session")
+def imz_data_coord_int(tmp_path_factory: TempPathFactory, rng: np.random.Generator) -> ImzMLParser:
+    # Simplify the previous process for a single coordinate image (1x1)
+    img_dim: int = 1
+
+    # Generate random integers n for each coordinate (1 x 1). These will be used for creating
+    # random m/z and intensity values of length n.
+    # Lengths n are distributed along the standard gamma.
+    ns: np.ndarray = np.rint(rng.standard_gamma(shape=2.5, size=(img_dim**2)) * 100).astype(int)
+
+    # Generate random masses and sample different amounts of them, so we get duplicates
+    total_mzs: np.ndarray = (10000 - 100) * rng.random(size=img_dim**2 * 2) + 100
+
+    coords = [(x, y, 1) for x in range(1, img_dim + 1) for y in range(1, img_dim + 1)]
+
+    output_file_name: Path = tmp_path_factory.mktemp("data") / "test_data.imzML"
+
+    with ImzMLWriter(output_filename=output_file_name, mode="processed") as imzml:
+        for coord, n in zip(coords, ns):
+            # Masses: 100 <= mz < 10000, of length n, sampled randomly
+            mzs = rng.choice(a=total_mzs, size=n)
+
+            # Intensities: 0 <= int < 1e8, of length n
+            ints: np.ndarray = rng.exponential(size=n)
+
+            imzml.addSpectrum(mzs=mzs, intensities=ints, coords=coord)
+
+    yield ImzMLParser(filename=output_file_name)
+
+
+@pytest.fixture(scope="session")
 def total_mass_df(rng: np.random.Generator) -> pd.DataFrame:
     mz_count: int = 10000
     df = pd.DataFrame(
@@ -75,8 +105,8 @@ def percentile_intensities(
 
 @pytest.fixture(scope="session")
 def peak_idx_candidates(
-    total_mass_df: pd.DataFrame, percentile_intensities: tuple[np.ndarray, np.ndarray]
-) -> Generator[tuple[np.ndarray, np.ndarray], None, None]:
+    total_mass_df: pd.DataFrame, percentile_intensities: Tuple[np.ndarray, np.ndarray]
+) -> Generator[Tuple[np.ndarray, np.ndarray], None, None]:
     _, log_int_percentile = percentile_intensities
 
     peak_candidate_indexes, peak_candidates = extraction.signal_extraction(
@@ -87,8 +117,8 @@ def peak_idx_candidates(
 
 @pytest.fixture(scope="session")
 def peak_widths(
-    total_mass_df, peak_idx_candidates
-) -> Generator[tuple[pd.DataFrame, np.ndarray, np.ndarray, np.ndarray], None, None]:
+    total_mass_df: pd.DataFrame, peak_idx_candidates: Tuple[np.ndarray, np.ndarray]
+) -> Generator[Tuple[pd.DataFrame, np.ndarray, np.ndarray, np.ndarray], None, None]:
     peak_candidate_idxs, peak_candidates = peak_idx_candidates
     peak_df, l_ips_r, r_ips_r, peak_widths_height = extraction.get_peak_widths(
         total_mass_df=total_mass_df,
@@ -98,6 +128,16 @@ def peak_widths(
     )
 
     yield (peak_df, l_ips_r, r_ips_r, peak_widths_height)
+
+
+@pytest.fixture(scope="session")
+def peak_widths_coord_int(imz_data_coord_int: ImzMLParser):
+    mzs, intensities = imz_data_coord_int.getspectrum(0)
+    peak_df = pd.DataFrame({"m/z": mzs, "intensity": intensities})
+    peak_df["peak"] = (peak_df["m/z"] + 0.04).copy()
+    peak_df["peak_height"] = 0.001
+
+    yield peak_df
 
 
 @pytest.fixture(scope="session")

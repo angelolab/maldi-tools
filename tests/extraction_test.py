@@ -2,7 +2,7 @@
 
 import os
 import pathlib
-from typing import List
+from typing import List, Tuple
 
 import numpy as np
 import pandas as pd
@@ -14,7 +14,7 @@ from pyimzml.ImzMLParser import ImzMLParser
 from pytest import TempPathFactory
 from skimage.io import imread
 
-from maldi_tools import extraction
+from maldi_tools import extraction, plotting
 
 
 def test_extract_spectra(imz_data: ImzMLParser) -> None:
@@ -41,7 +41,7 @@ def test_rolling_window(total_mass_df: pd.DataFrame) -> None:
 
 
 def test_signal_extraction(
-    total_mass_df: pd.DataFrame, percentile_intensities: tuple[np.ndarray, np.ndarray]
+    total_mass_df: pd.DataFrame, percentile_intensities: Tuple[np.ndarray, np.ndarray]
 ) -> None:
     _, log_int_percentile = percentile_intensities
     peak_candidate_indexes, peak_candidates = extraction.signal_extraction(
@@ -56,7 +56,7 @@ def test_signal_extraction(
     assert np.all(peak_candidates[1:] >= peak_candidates[:-1])
 
 
-def test_get_peak_widths(total_mass_df: pd.DataFrame, peak_idx_candidates: tuple[np.ndarray, np.ndarray]):
+def test_get_peak_widths(total_mass_df: pd.DataFrame, peak_idx_candidates: Tuple[np.ndarray, np.ndarray]):
     peak_candidate_idxs, peak_candidates = peak_idx_candidates
     peak_df, l_ips_r, r_ips_r, peak_widths_height = extraction.get_peak_widths(
         total_mass_df=total_mass_df,
@@ -73,8 +73,8 @@ def test_get_peak_widths(total_mass_df: pd.DataFrame, peak_idx_candidates: tuple
 
 def test_peak_spectra(
     total_mass_df: pd.DataFrame,
-    peak_idx_candidates: tuple[np.ndarray, np.ndarray],
-    peak_widths: tuple[pd.DataFrame, np.ndarray, np.ndarray, np.ndarray],
+    peak_idx_candidates: Tuple[np.ndarray, np.ndarray],
+    peak_widths: Tuple[pd.DataFrame, np.ndarray, np.ndarray, np.ndarray],
     tmp_path: pathlib.Path,
 ):
     debug_dir = tmp_path / "debug_dir"
@@ -100,12 +100,27 @@ def test_peak_spectra(
         assert os.path.exists(debug_dir / f"{peak.peak:.4f}.png".replace(".", "_", 1))
 
 
-def test_coordinate_integration(imz_data, peak_widths):
-    peak_df, *_ = peak_widths
-    img_data = extraction.coordinate_integration(peak_df=peak_df, imz_data=imz_data)
+def test_coordinate_integration(
+    imz_data_coord_int: ImzMLParser,
+    peak_widths_coord_int: pd.DataFrame,
+    image_xr: xr.DataArray,
+    tmp_path: pathlib.Path,
+):
+    # peak_df, *_ = peak_widths
+    extraction_dir = tmp_path / "extraction_dir"
 
-    # Make sure the shape of any given image is correct.
-    assert img_data.shape[1:] == (10, 10)
+    extraction.coordinate_integration(
+        peak_df=peak_widths_coord_int, imz_data=imz_data_coord_int, extraction_dir=extraction_dir
+    )
+
+    # Make sure the shape of any given image is correct for both float and int
+    test_float_peak_img = list_files(extraction_dir / "float")[0]
+    float_img_data = imread(extraction_dir / "float" / test_float_peak_img)
+    assert float_img_data.shape == (1, 1)
+
+    test_int_peak_img = list_files(extraction_dir / "int")[0]
+    int_img_data = imread(extraction_dir / "int" / test_int_peak_img)
+    assert int_img_data.shape == (1, 1)
 
 
 @pytest.mark.parametrize(
@@ -124,24 +139,26 @@ def test__matching_vec(library: pd.DataFrame, obs_mz: int, true_values: pd.Serie
 
 
 @pytest.mark.parametrize(argnames="_ppm", argvalues=[99])
-def test_library_matching(image_xr: xr.DataArray, library: pd.DataFrame, _ppm: int, tmp_path: pathlib.Path):
+def test_library_matching(library: pd.DataFrame, image_xr: xr.DataArray, _ppm: int, tmp_path: pathlib.Path):
     extraction_dir = tmp_path / "extraction_dir"
     extraction_dir.mkdir(parents=True, exist_ok=True)
+    plotting.save_peak_images(image_xr, extraction_dir)
 
     peak_df: pd.DataFrame = extraction.library_matching(
-        image_xr=image_xr, library_peak_df=library, ppm=_ppm, extraction_dir=extraction_dir
+        library_peak_df=library, ppm=_ppm, extraction_dir=extraction_dir
     )
 
     for idx, row in enumerate(peak_df.itertuples()):
-        if idx < 4:
+        if row.peak not in {30.0, 45.0}:
             assert row.matched is False
             assert np.isnan(row.composition)
             assert np.isnan(row.mass_error)
             assert np.isnan(row.lib_mz)
         else:
+            assert row.matched is True
             assert row.mass_error == 0
             assert row.composition in {"A", "B"}
-            assert row.peak in {30, 45}
+            assert row.lib_mz in {30.0, 45.0}
 
 
 def test_generate_glycan_mask(

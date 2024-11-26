@@ -16,7 +16,7 @@ from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
-import xarray as xr
+from alpineer.image_utils import save_image
 from alpineer.io_utils import list_files, remove_file_extensions, validate_paths
 from alpineer.misc_utils import verify_in_list
 from pyimzml.ImzMLParser import ImzMLParser
@@ -27,7 +27,7 @@ from tqdm.notebook import tqdm
 from maldi_tools import plotting
 
 
-def extract_spectra(imz_data: ImzMLParser, intensity_percentile: int) -> tuple[pd.DataFrame, np.ndarray]:
+def extract_spectra(imz_data: ImzMLParser, intensity_percentile: int) -> Tuple[pd.DataFrame, np.ndarray]:
     """Iterates over all coordinates after opening the `imzML` data and extracts all masses,
     and sums the intensities for all masses. Creates an intensity image, thresholded on
     `intensity_percentile` with `np.percentile`. The masses are then sorted.
@@ -39,7 +39,7 @@ def extract_spectra(imz_data: ImzMLParser, intensity_percentile: int) -> tuple[p
 
     Returns:
     -------
-        tuple[pd.DataFrame, np.ndarray]: A tuple where the first element is the dataframe containing
+        Tuple[pd.DataFrame, np.ndarray]: A tuple where the first element is the dataframe containing
         the total masses and their intensities, and the second element is the thresholds matrix
         of the image.
     """
@@ -70,7 +70,7 @@ def extract_spectra(imz_data: ImzMLParser, intensity_percentile: int) -> tuple[p
 
 def rolling_window(
     total_mass_df: pd.DataFrame, intensity_percentile: int, window_size: int = 5000
-) -> tuple[np.ndarray, np.ndarray]:
+) -> Tuple[np.ndarray, np.ndarray]:
     """Computes the rolling window log intensities and the rolling window log intensity percentiles.
 
     Args:
@@ -78,12 +78,12 @@ def rolling_window(
         total_mass_df (pd.DataFrame): A dataframe containing all the masses and their
             relative intensities.
         intensity_percentile (int): The intensity for the quantile calculation.
-        window_size (int, optional): The sizve of the window for the rolling window method.
+        window_size (int): The sizve of the window for the rolling window method.
             Defaults to 5000.
 
     Returns:
     -------
-        tuple[np.ndarray, np.ndarray]: A tuple where the first element is the log intensities,
+        Tuple[np.ndarray, np.ndarray]: A tuple where the first element is the log intensities,
             and the second element is the log intensity percentiles.
     """
     plt_range_min_ind: int = 0
@@ -241,22 +241,18 @@ def peak_spectra(
     return panel_df
 
 
-def coordinate_integration(peak_df: pd.DataFrame, imz_data: ImzMLParser) -> xr.DataArray:
+def coordinate_integration(peak_df: pd.DataFrame, imz_data: ImzMLParser, extraction_dir: Path) -> None:
     """Integrates the coordinates with the discovered, post-processed peaks and generates an image for
     each of the peaks using the imzML coordinate data.
+
+    Saves the peak images to specified extraction_dir.
 
     Args:
     ----
         peak_df (pd.DataFrame): The unique peaks from the data.
         imz_data (ImzMLParser): The imzML object.
-
-    Returns:
-    -------
-        xr.DataArray: A data structure which holds all the images for each peak.
+        extraction_dir (Path): The directory to save extracted data (peak images) in.
     """
-    unique_peaks = peak_df["peak"].unique()
-    peak_dict = dict(zip(unique_peaks, np.arange((len(unique_peaks)))))
-
     imz_coordinates: list = imz_data.coordinates
 
     x_size: int = max(imz_coordinates, key=itemgetter(0))[0]
@@ -264,23 +260,30 @@ def coordinate_integration(peak_df: pd.DataFrame, imz_data: ImzMLParser) -> xr.D
 
     image_shape: Tuple[int, int] = (x_size, y_size)
 
-    imgs = np.zeros((len(unique_peaks), *image_shape))
+    float_peak_dir: Path = Path(extraction_dir) / "float"
+    int_peak_dir: Path = Path(extraction_dir) / "int"
+    for img_dir in [float_peak_dir, int_peak_dir]:
+        if not os.path.exists(img_dir):
+            img_dir.mkdir(parents=True, exist_ok=True)
 
     for idx, (x, y, _) in tqdm(enumerate(imz_data.coordinates), total=len(imz_data.coordinates)):
         mzs, intensities = imz_data.getspectrum(idx)
-
         intensity: np.ndarray = intensities[np.isin(mzs, peak_df["m/z"])]
 
         for i_idx, peak in peak_df.loc[peak_df["m/z"].isin(mzs), "peak"].reset_index(drop=True).items():
-            imgs[peak_dict[peak], x - 1, y - 1] += intensity[i_idx]
+            img_name: str = f"{peak:.4f}".replace(".", "_")
+            float_peak_path: Path = float_peak_dir / f"{img_name}.tiff"
+            int_peak_path: Path = int_peak_dir / f"{img_name}.tiff"
+            peak_exists: bool = os.path.exists(float_peak_path)
+            peak_img: np.ndarray = imread(float_peak_path).T if peak_exists else np.zeros(image_shape)
 
-    img_data = xr.DataArray(
-        data=imgs,
-        coords={"peak": unique_peaks, "x": range(x_size), "y": range(y_size)},
-        dims=["peak", "x", "y"],
-    )
-
-    return img_data
+            peak_img[x - 1, y - 1] += intensity[i_idx]
+            peak_img_float: np.ndarray = peak_img.T
+            peak_img_int: np.ndarray = (peak_img_float * (2**32 - 1) / np.max(peak_img_float)).astype(
+                np.uint32
+            )
+            save_image(fname=float_peak_path, data=peak_img_float)
+            save_image(fname=int_peak_path, data=peak_img_int)
 
 
 def _matching_vec(obs_mz: pd.Series, library_peak_df: pd.DataFrame, ppm: int) -> pd.Series:
@@ -312,7 +315,6 @@ def _matching_vec(obs_mz: pd.Series, library_peak_df: pd.DataFrame, ppm: int) ->
 
 
 def library_matching(
-    image_xr: xr.DataArray,
     library_peak_df: pd.DataFrame,
     ppm: int,
     extraction_dir: Path,
@@ -323,19 +325,21 @@ def library_matching(
 
     Args:
     ----
-        image_xr (xr.DataArray): A data structure which holds all the images for each peak.
         library_peak_df (pd.DataFrame): The library of interest to match the observed peaks with.
         ppm (int): The ppm for an acceptable mass error range between the observed mass and any target
         mass in the library.
         extraction_dir (Path): The directory to save extracted data in.
-        adducts (bool, optional): Add adducts together. Defaults to False. (Not implemented feature)
+        adducts (bool): Add adducts together. Defaults to False. (Not implemented feature)
 
     Returns:
     -------
         pd.DataFrame: Contains the peak, the library target mass, a boolean stating if a match was found
         or not, the composition name and the mass error if a match was found or not.
     """
-    peak_df = pd.DataFrame({"peak": image_xr.peak.to_numpy()})
+    peak_list: List[float] = [
+        float(p.replace("_", ".")) for p in remove_file_extensions(list_files(Path(extraction_dir) / "float"))
+    ]
+    peak_df = pd.DataFrame({"peak": np.array(peak_list)})
     match_fun = partial(_matching_vec, library_peak_df=library_peak_df, ppm=ppm)
 
     peak_df[["lib_mz", "matched", "composition", "mass_error"]] = peak_df["peak"].apply(
