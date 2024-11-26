@@ -262,10 +262,9 @@ def coordinate_integration(peak_df: pd.DataFrame, imz_data: ImzMLParser, extract
 
     float_peak_dir: Path = Path(extraction_dir) / "float"
     int_peak_dir: Path = Path(extraction_dir) / "int"
-    if not os.path.exists(float_peak_dir):
-        os.makedirs(float_peak_dir)
-    if not os.path.exists(int_peak_dir):
-        os.makedirs(int_peak_dir)
+    for img_dir in [float_peak_dir, int_peak_dir]:
+        if not os.path.exists(img_dir):
+            img_dir.mkdir(parents=True, exist_ok=True)
 
     for idx, (x, y, _) in tqdm(enumerate(imz_data.coordinates), total=len(imz_data.coordinates)):
         mzs, intensities = imz_data.getspectrum(idx)
