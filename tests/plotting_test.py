@@ -5,6 +5,7 @@ import pathlib
 
 import numpy as np
 import pandas as pd
+import pytest
 import xarray as xr
 from skimage.io import imread
 
@@ -80,6 +81,23 @@ def test_save_peak_images(image_xr: xr.DataArray, tmp_path: pathlib.Path):
 
         iname = extraction_dir / "int" / f"{peak:.4f}.tiff".replace(".", "_", 1)
         assert os.path.exists(iname)
+
+
+def test_plot_peak_hist(image_xr: xr.DataArray, tmp_path: pathlib.Path):
+    extraction_dir = tmp_path / "extraction_dir"
+    extraction_dir.mkdir(parents=True, exist_ok=True)
+
+    # ensure the test actually truncates to 4 digits correctly
+    image_xr = image_xr.assign_coords(peak=np.random.rand(6) * 100)
+
+    plotting.save_peak_images(image_xr=image_xr, extraction_dir=extraction_dir)
+
+    # this test should run to completion, since the peak can be loaded
+    plotting.plot_peak_hist(peak=image_xr.peak.values[0], bin_count=30, extraction_dir=extraction_dir)
+
+    # this test should fail since the peak does not exist
+    with pytest.raises(FileNotFoundError):
+        plotting.plot_peak_hist(peak=50.0123, bin_count=30, extraction_dir=extraction_dir)
 
 
 def test_save_matched_peak_images(rng: np.random.Generator, image_xr: xr.DataArray, tmp_path: pathlib.Path):

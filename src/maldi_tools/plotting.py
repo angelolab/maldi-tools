@@ -163,13 +163,17 @@ def plot_peak_hist(peak: float, bin_count: int, extraction_dir: Path) -> None:
         extraction_dir (Path): The directory the peak images are saved in
     """
     # verify that the peak provided exists
-    peak_path = extraction_dir / f"{str(peak).replace('.', '_')}.tiff"
+    peak_file: str = f"{peak:.4f}".replace(".", "_")
+    peak_file = peak_file + ".tiff"
+    peak_path = Path(extraction_dir) / "float" / peak_file
     if not os.path.exists(peak_path):
-        raise FileNotFoundError(f"Peak {peak} does not have a corresponding peak image in {extraction_dir}")
+        raise FileNotFoundError(
+            f"Peak {peak:.4f} does not have a corresponding peak image in {extraction_dir}"
+        )
 
     # load the peak image in and display histogram
     peak_img: np.ndarray = io.imread(peak_path)
-    plt.hist(peak_img.values, bins=bin_count)
+    plt.hist(peak_img, bins=bin_count)
 
 
 def save_matched_peak_images(
