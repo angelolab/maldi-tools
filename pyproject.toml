@@ -7,7 +7,7 @@ readme = "README.md"
 packages = [{ include = "maldi_tools", from = "src" }]
 
 [tool.poetry.dependencies]
-python = ">=3.10,<3.12"
+python = ">=3.10,<3.13"
 matplotlib = "^3.7.1"
 numpy = "^1.24.2"
 xarray = "^2023.2.0"

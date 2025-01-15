@@ -264,7 +264,7 @@ def coordinate_integration(peak_df: pd.DataFrame, imz_data: ImzMLParser) -> xr.D
 
     image_shape: Tuple[int, int] = (x_size, y_size)
 
-    imgs = np.zeros((len(unique_peaks), *image_shape))
+    imgs = np.zeros((len(unique_peaks), *image_shape), dtype=np.float32)
 
     for idx, (x, y, _) in tqdm(enumerate(imz_data.coordinates), total=len(imz_data.coordinates)):
         mzs, intensities = imz_data.getspectrum(idx)
