@@ -27,16 +27,24 @@ BASE_PATH = Path(os.path.dirname(os.path.realpath(__file__)))
 def generate_mz_bins(
     min_mz: float = 800,
     max_mz: float = 4000,
-    num_bins: int = 321889
 ) -> np.ndarray:
     """Given a range of mz values, generate the bins as would be calculated by Bruker's SCiLS.
 
     This is computed using logirathmic binning:
 
-    mz_i = min_mz * (max_mz / min_mz) * (i / (num_bins - 1))
+    ```mz_i = min_mz * (max_mz / min_mz) * (i / (num_bins - 1))```
 
-    Note that the computed values may be slightly off the SCiLS values, as the latter has floating
-    point errors.
+    The minimum bin size in m/z is computed as 0.005 * min_mz / 1000, which is then used
+    to replicate the SCiLS num_bins calculation:
+
+    ```int(log(max_mz / min_mz) / log(1 + (0.005 * min_mz / 1000) / min_mz))```
+
+    Which is the same as:
+
+    ```int(log(max_mz / min_mz) / log(1.000005))```
+
+    Note that the computed values may be very slightly off the SCiLS values, as the former has
+    floating point errors.
 
     Args:
     ----
@@ -44,28 +52,26 @@ def generate_mz_bins(
             The minimum mz extracted to start the binning at
         max_mz (float):
             The maximum mz extracted to start the binning at
-        num_bins (int):
-            The number of bins to extract between `min_mz` and `max_mz`
 
     Returns:
     -------
         Tuple[np.ndarray]:
             The list of mz values to use for defining the central, left, and right points of each bin
     """
+    num_bins = int(np.log(max_mz / min_mz) / np.log(1.000005))
     bin_centers = [min_mz * (max_mz / min_mz) ** (i / (num_bins - 1)) for i in np.arange(num_bins)]
-    bin_deltas = [bin_centers[1] - bin_centers[0]] + [
-        (bin_centers[i + 1] - bin_centers[i - 1]) / 2 for i in np.arange(1, num_bins - 1)
-    ] + [bin_centers[-1] - bin_centers[-2]]
+    bin_deltas = (
+        [bin_centers[1] - bin_centers[0]]
+        + [(bin_centers[i + 1] - bin_centers[i - 1]) / 2 for i in np.arange(1, num_bins - 1)]
+        + [bin_centers[-1] - bin_centers[-2]]
+    )
     bin_lefts = [bc - bd / 2 for (bc, bd) in zip(bin_centers, bin_deltas)]
     bin_rights = [bc + bd / 2 for (bc, bd) in zip(bin_centers, bin_deltas)]
 
     return bin_centers, bin_lefts, bin_rights
 
 
-def init_tsf_load_object(
-    maldi_data_path: Union[str, Path],
-    tdf_sdk_binary: CDLL
-) -> TsfData:
+def init_tsf_load_object(maldi_data_path: Union[str, Path], tdf_sdk_binary: CDLL) -> TsfData:
     """Initialize the cursor (TsfData object).
 
     Args:
@@ -84,10 +90,7 @@ def init_tsf_load_object(
 
 
 def extract_maldi_tsf_data(
-    maldi_data_path: Union[str, Path],
-    min_mz: float = 800,
-    max_mz: float = 4000,
-    tic_normalize: bool = False
+    maldi_data_path: Union[str, Path], min_mz: float = 800, max_mz: float = 4000, tic_normalize: bool = False
 ) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """Extract the spectra data for a particular MALDI run.
 
@@ -131,16 +134,19 @@ def extract_maldi_tsf_data(
 
         for mz, intensity in zip(mz_arr, intensity_arr):
             mz_bin_index = bisect_left(mz_bin_rights, mz)
-            if mz_bin_index < len(mz_bin_lefts) and mz_bin_lefts[mz_bin_index] <= mz <= mz_bin_rights[mz_bin_index]:
+            if (
+                mz_bin_index < len(mz_bin_lefts)
+                and mz_bin_lefts[mz_bin_index] <= mz <= mz_bin_rights[mz_bin_index]
+            ):
                 mz_bin = mz_bins_centers[mz_bin_index]
             else:
                 print(f"Found invalid bin {mz_bin_rights[mz_bin_index]} for mz values {mz}")
                 continue
 
-            spectra_dict[mz_bin] = (
-                0 if mz_bin not in spectra_dict else spectra_dict[mz_bin]
-            ) + (intensity / intensity_sum)
-            total_intensity_norm += (intensity / intensity_sum)
+            spectra_dict[mz_bin] = (0 if mz_bin not in spectra_dict else spectra_dict[mz_bin]) + (
+                intensity / intensity_sum
+            )
+            total_intensity_norm += intensity / intensity_sum
 
     scaling_factor = (total_intensity / num_intensity_vals) / (total_intensity_norm / num_intensity_vals)
     if tic_normalize:
@@ -162,9 +168,8 @@ def extract_maldi_run_spectra(
     maldi_paths: List[Union[str, Path]],
     min_mz: float = 800,
     max_mz: float = 4000,
-    num_bins: int = 321889,
     num_workers: int = 16,
-    tic_normalize: bool = False
+    tic_normalize: bool = False,
 ) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """Extract the full spectra and corresponding poslog information from the MALDI files.
 
@@ -188,8 +193,6 @@ def extract_maldi_run_spectra(
         Tuple[pandas.DataFrame, pandas.DataFrame:
             Two DataFrames containing the spectra and poslog info across all runs respectively
     """
-    if num_bins <= 0:
-        raise ValueError("num_bins specified must be positive")
     if num_workers <= 0:
         raise ValueError("num_workers specified must be positive")
 
@@ -198,9 +201,8 @@ def extract_maldi_run_spectra(
 
     with ProcessPoolExecutor(max_workers=num_workers) as executor:
         future_maldi_data = {
-            executor.submit(
-                extract_maldi_tsf_data, mp, min_mz, max_mz, tic_normalize
-            ): mp for mp in maldi_paths
+            executor.submit(extract_maldi_tsf_data, mp, min_mz, max_mz, tic_normalize): mp
+            for mp in maldi_paths
         }
 
         for future in as_completed(future_maldi_data):
@@ -209,7 +211,7 @@ def extract_maldi_run_spectra(
                 poslog_mp, spectra_mp = future.result()
                 poslog_df = pd.concat([poslog_df, poslog_mp])
                 spectra_df = pd.concat([spectra_df, spectra_mp])
-            except Exception as e:
+            except Exception:
                 print(f"Exception raised while processing {mp}")
 
     poslog_df = poslog_df.reset_index(drop=True)
