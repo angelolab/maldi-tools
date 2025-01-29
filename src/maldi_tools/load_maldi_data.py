@@ -95,7 +95,7 @@ def extract_maldi_tsf_data(
     """Extract the spectra data for a particular MALDI run.
 
     Args:
-    ====
+    ----
         maldi_data_path (Union[str, Path]):
             The path to the raw MALDI data, must end with a `.d` extension
         min_mz (float):
