@@ -5,6 +5,9 @@ dependencies:
   - python=3.11
   - pip
   - jupyterlab
+  - jupyterlab-lsp
+  - jupyterlab-git
+  - jupyterlab_execute_time
   - ipywidgets
   - tqdm
   - numpy
