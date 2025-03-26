@@ -7,15 +7,19 @@ like timsconvert.
 TODO: need to access TIC normalization, or else add it in manually.
 """
 
+import gzip
 import os
+import shutil
 from bisect import bisect_left
-from concurrent.futures import ProcessPoolExecutor, as_completed
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 from ctypes import CDLL
 from pathlib import Path
 from typing import Dict, List, Tuple, Union
 
 import numpy as np
 import pandas as pd
+import xarray as xr
+from feather import write_dataframe
 from pyTDFSDK.classes import TsfData
 from pyTDFSDK.init_tdf_sdk import init_tdf_sdk_api
 from pyTDFSDK.tsf import tsf_index_to_mz, tsf_read_line_spectrum_v2
@@ -89,9 +93,26 @@ def init_tsf_load_object(maldi_data_path: Union[str, Path], tdf_sdk_binary: CDLL
     return TsfData(maldi_data_path, tdf_sdk=tdf_sdk_binary)
 
 
+def compress_file(input_path: Union[str, Path], output_path: Union[str, Path]):
+    with open(input_path, "rb") as f_in:
+        with gzip.open(output_path, "wb") as f_out:
+            shutil.copyfileobj(f_in, f_out)
+
+    os.remove(input_path)
+
+
+def get_img_dimensions(tsf_poslog: pd.DataFrame):
+    tsf_poslog[""]
+
+
 def extract_maldi_tsf_data(
-    maldi_data_path: Union[str, Path], min_mz: float = 800, max_mz: float = 4000, tic_normalize: bool = False
-) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    maldi_data_path: Union[str, Path],
+    min_mz: float = 800,
+    max_mz: float = 4000,
+    intensity_percentile: float = 99,
+    tic_normalize: bool = False,
+    spectra_sub_dir: Union[str, Path] = os.path.join("output", "extracted"),
+) -> Tuple[pd.DataFrame, pd.DataFrame, np.ndarray, str]:
     """Extract the spectra data for a particular MALDI run.
 
     Args:
@@ -102,16 +123,31 @@ def extract_maldi_tsf_data(
             The minimum m/z value observed during the run
         max_mz (float):
             The maximum m/z value observed during the run
+        intensity_percentile (int):
+            Define the percentile to store as the threshold value per spot
+        spectra_sub_dir (Union[str, Path]):
+            The path to the extract spectra output folder, ideally should not be changed
         tic_normalize (bool):
             Whether or not to apply TIC normalization, default to False
 
     Returns:
     -------
-        Tuple[pandas.DataFrame, pandas.DataFrame]:
-            Two DataFrames containing the spectra and poslog info across the run respectively
+        Tuple[pandas.DataFrame, pandas.DataFrame, np.ndarray, str]:
+            Two DataFrames containing the spectra and poslog info across the run respectively,
+            the thresholds array per spot, and the name of the run
     """
-    tdf_sdk_binary: CDLL = init_tdf_sdk_api(os.path.join(BASE_PATH, "timsdata.dll"))
+    spectra_path: Path = Path(maldi_data_path) / "spectra"
+    if not os.path.exists(spectra_path):
+        os.makedirs(spectra_path)
+
+    tdf_sdk_binary: CDLL = init_tdf_sdk_api(BASE_PATH)
     tsf_cursor: TsfData = init_tsf_load_object(maldi_data_path, tdf_sdk_binary)
+
+    tsf_poslog: pd.DataFrame = tsf_cursor.analysis["MaldiFrameInfo"]
+    run_name = os.path.basename(os.path.splitext(maldi_data_path)[0])
+    tsf_poslog["run_name"] = run_name
+
+    thresholds: np.ndarray = np.zeros(tsf_poslog["XIndexPos"].max(), tsf_poslog["YIndexPos"].max())
 
     mz_bins_centers, mz_bin_lefts, mz_bin_rights = generate_mz_bins(min_mz, max_mz)
     spectra_dict: Dict[float, float] = {}
@@ -119,6 +155,7 @@ def extract_maldi_tsf_data(
     total_intensity = 0
     total_intensity_norm = 0
     num_intensity_vals = 0
+    executor = ThreadPoolExecutor(max_workers=4)  # Adjust concurrency as needed
     for sid in tsf_spot_info["Id"].values:
         index_arr, intensity_arr = tsf_read_line_spectrum_v2(
             tdf_sdk=tdf_sdk_binary, handle=tsf_cursor.handle, frame_id=sid
@@ -132,6 +169,7 @@ def extract_maldi_tsf_data(
         if intensity_sum == 0:
             continue
 
+        spot_mz_dict: Dict[float, float] = {}
         for mz, intensity in zip(mz_arr, intensity_arr):
             mz_bin_index = bisect_left(mz_bin_rights, mz)
             if (
@@ -143,34 +181,47 @@ def extract_maldi_tsf_data(
                 print(f"Found invalid bin {mz_bin_rights[mz_bin_index]} for mz values {mz}")
                 continue
 
+            spot_mz_dict[mz_bin] = (0 if mz_bin not in spot_mz_dict else spot_mz_dict[mz_bin]) + (
+                intensity / intensity_sum
+            )
             spectra_dict[mz_bin] = (0 if mz_bin not in spectra_dict else spectra_dict[mz_bin]) + (
                 intensity / intensity_sum
             )
             total_intensity_norm += intensity / intensity_sum
 
+        spot_df = pd.DataFrame(list(spot_mz_dict.items()), columns=["spectra", "intensity"])
+        write_dataframe(spectra_path / f"{run_name}_spot_{sid}_spectra.feather", spot_df)
+        executor.submit(
+            compress_file,
+            spectra_path / f"{run_name}_spot_{sid}_spectra.feather",
+            spectra_path / f"{run_name}_spot_{sid}_spectra.gz",
+        )
+
+        spot_x: int = tsf_poslog[tsf_poslog["Frame"] == sid]["XIndexPos"].values[0]
+        spot_y: int = tsf_poslog[tsf_poslog["Frame"] == sid]["YIndexPos"].values[0]
+        thresholds[spot_x - 1, spot_y - 1] = np.percentile(intensity_arr, intensity_percentile)
+
     scaling_factor = (total_intensity / num_intensity_vals) / (total_intensity_norm / num_intensity_vals)
     if tic_normalize:
         for mz, intensity in spectra_dict.items():
             spectra_dict[mz] = intensity * scaling_factor
+            thresholds *= scaling_factor
 
-    run_name = os.path.basename(os.path.splitext(maldi_data_path)[0])
     tsf_spectra: pd.DataFrame = pd.DataFrame(spectra_dict.items(), columns=["m/z", "intensity"])
     tsf_spectra["run_name"] = run_name
     tsf_spectra.sort_values(by="m/z", inplace=True)
 
-    tsf_poslog: pd.DataFrame = tsf_cursor.analysis["MaldiFrameInfo"]
-    tsf_poslog["run_name"] = run_name
-
-    return tsf_spectra, tsf_poslog
+    return tsf_spectra, tsf_poslog, thresholds, run_name
 
 
 def extract_maldi_run_spectra(
     maldi_paths: List[Union[str, Path]],
     min_mz: float = 800,
     max_mz: float = 4000,
+    intensity_percentile: int = 99,
     num_workers: int = 16,
     tic_normalize: bool = False,
-) -> Tuple[pd.DataFrame, pd.DataFrame]:
+) -> Tuple[pd.DataFrame, pd.DataFrame, xr.DataArray]:
     """Extract the full spectra and corresponding poslog information from the MALDI files.
 
     Args:
@@ -181,6 +232,8 @@ def extract_maldi_run_spectra(
             The minimum m/z value observed during the run
         max_mz (float):
             The maximum m/z value observed during the run
+        intensity_percentile (int):
+            Define the percentile to store as the threshold value per spot
         num_bins (int):
             The number of m/z bins to extract between `min_mz` and `max_mz`
         num_workers (int):
@@ -190,31 +243,41 @@ def extract_maldi_run_spectra(
 
     Returns:
     -------
-        Tuple[pandas.DataFrame, pandas.DataFrame:
-            Two DataFrames containing the spectra and poslog info across all runs respectively
+        Tuple[pandas.DataFrame, pandas.DataFrame, xr.DataArray]:
+            Two DataFrames containing the spectra and poslog info across all runs respectively,
+            and a DataArray containing the thresholds to use for each run
     """
     if num_workers <= 0:
         raise ValueError("num_workers specified must be positive")
 
     poslog_df: pd.DataFrame = pd.DataFrame()
     spectra_df: pd.DataFrame = pd.DataFrame()
+    thresholds_list: List[np.ndarray] = []
+    run_names: List[str] = []
 
     with ProcessPoolExecutor(max_workers=num_workers) as executor:
         future_maldi_data = {
-            executor.submit(extract_maldi_tsf_data, mp, min_mz, max_mz, tic_normalize): mp
+            executor.submit(
+                extract_maldi_tsf_data, Path(mp), min_mz, max_mz, intensity_percentile, tic_normalize
+            ): mp
             for mp in maldi_paths
         }
 
         for future in as_completed(future_maldi_data):
             mp = future_maldi_data[future]
             try:
-                poslog_mp, spectra_mp = future.result()
+                poslog_mp, spectra_mp, thresholds, run_name = future.result()
                 poslog_df = pd.concat([poslog_df, poslog_mp])
                 spectra_df = pd.concat([spectra_df, spectra_mp])
+                thresholds_list.append(thresholds)
+                run_names.append(run_name)
             except Exception:
                 print(f"Exception raised while processing {mp}")
 
     poslog_df = poslog_df.reset_index(drop=True)
     spectra_df = spectra_df.reset_index(drop=True)
+    thresholds_arr: xr.DataArray = xr.DataArray(
+        np.stack(thresholds_list), dims=["run_name", "x", "y"], coords={"run_name": run_names}
+    )
 
-    return poslog_df, spectra_df
+    return poslog_df, spectra_df, thresholds_arr
