@@ -7,19 +7,27 @@ to the user supplied library.
 """
 
 import os
+from bisect import bisect_left
+from ctypes import CDLL
 from functools import partial
 from operator import itemgetter
 from pathlib import Path
-from typing import Dict, Tuple
+from typing import Dict, Tuple, Union
 
 import numpy as np
 import pandas as pd
 import xarray as xr
 from pyimzml.ImzMLParser import ImzMLParser
+from pyTDFSDK.classes import TsfData
+from pyTDFSDK.init_tdf_sdk import init_tdf_sdk_api
+from pyTDFSDK.tsf import tsf_index_to_mz, tsf_read_line_spectrum_v2
 from scipy import signal
 from tqdm.notebook import tqdm
 
-from maldi_tools import plotting
+from maldi_tools import load_maldi_data, plotting
+
+# Path to the TDFSDK binary file (needed for coordinate integration)
+BASE_PATH = Path(os.path.dirname(os.path.realpath(__file__)))
 
 
 def extract_spectra(imz_data: ImzMLParser, intensity_percentile: int) -> tuple[pd.DataFrame, np.ndarray]:
@@ -232,14 +240,25 @@ def peak_spectra(
     return panel_df
 
 
-def coordinate_integration(peak_df: pd.DataFrame, imz_data: ImzMLParser) -> xr.DataArray:
+def coordinate_integration(
+    peak_df: pd.DataFrame,
+    poslog_df: pd.DataFrame,
+    scaling_factor: float,
+    run_data_path: Union[str, Path],
+    min_mz: float = 800,
+    max_mz: float = 4000,
+) -> xr.DataArray:
     """Integrates the coordinates with the discovered, post-processed peaks and generates an image for
     each of the peaks using the imzML coordinate data.
 
     Args:
     ----
         peak_df (pd.DataFrame): The unique peaks from the data.
-        imz_data (ImzMLParser): The imzML object.
+        poslog_df (pd.DataFrame): Defines the coordinates for each spot
+        scaling_factor (float): The TIC normalization constant for the run
+        run_data_path (Union[str, Path]): The path to the `.d` folder associated with your run data
+        min_mz (float): The minimum mz extracted to start the binning at
+        max_mz (float): The maximum mz extracted to end the binning at
 
     Returns:
     -------
@@ -248,22 +267,40 @@ def coordinate_integration(peak_df: pd.DataFrame, imz_data: ImzMLParser) -> xr.D
     unique_peaks = peak_df["peak"].unique()
     peak_dict = dict(zip(unique_peaks, np.arange((len(unique_peaks)))))
 
-    imz_coordinates: list = imz_data.coordinates
-
-    x_size: int = max(imz_coordinates, key=itemgetter(0))[0]
-    y_size: int = max(imz_coordinates, key=itemgetter(1))[1]
+    x_size: int = poslog_df["XIndexPos"].max()
+    y_size: int = poslog_df["YIndexPos"].max()
 
     image_shape: Tuple[int, int] = (x_size, y_size)
+    imgs = np.zeros((len(unique_peaks), *image_shape), dtype=np.float32)
 
-    imgs = np.zeros((len(unique_peaks), *image_shape))
+    tdf_sdk_binary: CDLL = init_tdf_sdk_api(BASE_PATH)
+    tsf_cursor: TsfData = load_maldi_data.init_tsf_load_object(run_data_path, tdf_sdk_binary)
 
-    for idx, (x, y, _) in tqdm(enumerate(imz_data.coordinates), total=len(imz_data.coordinates)):
-        mzs, intensities = imz_data.getspectrum(idx)
+    mz_bin_centers, mz_bin_lefts, mz_bin_rights = load_maldi_data.generate_mz_bins(min_mz, max_mz)
 
-        intensity: np.ndarray = intensities[np.isin(mzs, peak_df["m/z"])]
+    for sid in tsf_cursor.analysis["Frames"]["Id"].values:
+        index_arr, intensity_arr = tsf_read_line_spectrum_v2(
+            tdf_sdk=tdf_sdk_binary, handle=tsf_cursor.handle, frame_id=sid
+        )
+        mz_arr: np.ndarray = tsf_index_to_mz(
+            tdf_sdk=tdf_sdk_binary, handle=tsf_cursor.handle, frame_id=sid, indices=index_arr
+        )
 
-        for i_idx, peak in peak_df.loc[peak_df["m/z"].isin(mzs), "peak"].reset_index(drop=True).items():
-            imgs[peak_dict[peak], x - 1, y - 1] += intensity[i_idx]
+        # TODO: walrus operators are weird, need to verify functionality
+        mz_vals: np.ndarray = np.array(
+            [
+                mz_bin_centers[idx]
+                for mz in mz_arr
+                if (idx := bisect_left(mz_bin_rights, mz)) < len(mz_bin_centers)
+            ]
+        )
+
+        intensity_arr = intensity_arr[np.isin(mz_vals, peak_df["m/z"])] * scaling_factor
+        x: int = poslog_df[poslog_df["Frame"] == sid]["XIndexPos"].values[0]
+        y: int = poslog_df[poslog_df["Frame"] == sid]["YIndexPos"].values[0]
+
+        for i_idx, peak in peak_df.loc[peak_df["m/z"].isin(mz_vals), "peak"].reset_index(drop=True).items():
+            imgs[peak_dict[peak], x - 1, y - 1] += intensity_arr[i_idx]
 
     img_data = xr.DataArray(
         data=imgs,

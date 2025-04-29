@@ -11,7 +11,7 @@ import gzip
 import os
 import shutil
 from bisect import bisect_left
-from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from ctypes import CDLL
 from pathlib import Path
 from typing import Dict, List, Tuple, Union
@@ -19,7 +19,6 @@ from typing import Dict, List, Tuple, Union
 import numpy as np
 import pandas as pd
 import xarray as xr
-from feather import write_dataframe
 from pyTDFSDK.classes import TsfData
 from pyTDFSDK.init_tdf_sdk import init_tdf_sdk_api
 from pyTDFSDK.tsf import tsf_index_to_mz, tsf_read_line_spectrum_v2
@@ -55,7 +54,7 @@ def generate_mz_bins(
         min_mz (float):
             The minimum mz extracted to start the binning at
         max_mz (float):
-            The maximum mz extracted to start the binning at
+            The maximum mz extracted to end the binning at
 
     Returns:
     -------
@@ -136,9 +135,9 @@ def extract_maldi_tsf_data(
             Two DataFrames containing the spectra and poslog info across the run respectively,
             the thresholds array per spot, the name of the run, and the TIC scaling factor
     """
-    spectra_path: Path = Path(maldi_data_path) / "spectra"
-    if not os.path.exists(spectra_path):
-        os.makedirs(spectra_path)
+    # spectra_path: Path = Path(maldi_data_path) / "spectra"
+    # if not os.path.exists(spectra_path):
+    #     os.makedirs(spectra_path)
 
     tdf_sdk_binary: CDLL = init_tdf_sdk_api(BASE_PATH)
     tsf_cursor: TsfData = init_tsf_load_object(maldi_data_path, tdf_sdk_binary)
@@ -149,14 +148,13 @@ def extract_maldi_tsf_data(
 
     thresholds: np.ndarray = np.zeros(tsf_poslog["XIndexPos"].max(), tsf_poslog["YIndexPos"].max())
 
-    mz_bins_centers, mz_bin_lefts, mz_bin_rights = generate_mz_bins(min_mz, max_mz)
+    mz_bin_centers, mz_bin_lefts, mz_bin_rights = generate_mz_bins(min_mz, max_mz)
     spectra_dict: Dict[float, float] = {}
-    tsf_spot_info: pd.DataFrame = tsf_cursor.analysis["Frames"]
     total_intensity = 0
     total_intensity_norm = 0
     num_intensity_vals = 0
-    executor = ThreadPoolExecutor(max_workers=4)  # Adjust concurrency as needed
-    for sid in tsf_spot_info["Id"].values:
+
+    for sid in tsf_cursor.analysis["Frames"]["Id"].values:
         index_arr, intensity_arr = tsf_read_line_spectrum_v2(
             tdf_sdk=tdf_sdk_binary, handle=tsf_cursor.handle, frame_id=sid
         )
@@ -176,7 +174,7 @@ def extract_maldi_tsf_data(
                 mz_bin_index < len(mz_bin_lefts)
                 and mz_bin_lefts[mz_bin_index] <= mz <= mz_bin_rights[mz_bin_index]
             ):
-                mz_bin = mz_bins_centers[mz_bin_index]
+                mz_bin = mz_bin_centers[mz_bin_index]
             else:
                 print(f"Found invalid bin {mz_bin_rights[mz_bin_index]} for mz values {mz}")
                 continue
@@ -189,13 +187,13 @@ def extract_maldi_tsf_data(
             )
             total_intensity_norm += intensity / intensity_sum
 
-        spot_df = pd.DataFrame(list(spot_mz_dict.items()), columns=["spectra", "intensity"])
-        write_dataframe(spectra_path / f"{run_name}_spot_{sid}_spectra.feather", spot_df)
-        executor.submit(
-            compress_file,
-            spectra_path / f"{run_name}_spot_{sid}_spectra.feather",
-            spectra_path / f"{run_name}_spot_{sid}_spectra.gz",
-        )
+        # spot_df = pd.DataFrame(list(spot_mz_dict.items()), columns=["spectra", "intensity"])
+        # write_dataframe(spectra_path / f"{run_name}_spot_{sid}_spectra.feather", spot_df)
+        # executor.submit(
+        #     compress_file,
+        #     spectra_path / f"{run_name}_spot_{sid}_spectra.feather",
+        #     spectra_path / f"{run_name}_spot_{sid}_spectra.gz",
+        # )
 
         spot_x: int = tsf_poslog[tsf_poslog["Frame"] == sid]["XIndexPos"].values[0]
         spot_y: int = tsf_poslog[tsf_poslog["Frame"] == sid]["YIndexPos"].values[0]
