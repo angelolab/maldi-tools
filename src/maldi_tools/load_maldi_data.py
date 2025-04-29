@@ -112,7 +112,7 @@ def extract_maldi_tsf_data(
     intensity_percentile: float = 99,
     tic_normalize: bool = False,
     spectra_sub_dir: Union[str, Path] = os.path.join("output", "extracted"),
-) -> Tuple[pd.DataFrame, pd.DataFrame, np.ndarray, str]:
+) -> Tuple[pd.DataFrame, pd.DataFrame, np.ndarray, str, float]:
     """Extract the spectra data for a particular MALDI run.
 
     Args:
@@ -132,9 +132,9 @@ def extract_maldi_tsf_data(
 
     Returns:
     -------
-        Tuple[pandas.DataFrame, pandas.DataFrame, np.ndarray, str]:
+        Tuple[pandas.DataFrame, pandas.DataFrame, np.ndarray, str, float]:
             Two DataFrames containing the spectra and poslog info across the run respectively,
-            the thresholds array per spot, and the name of the run
+            the thresholds array per spot, the name of the run, and the TIC scaling factor
     """
     spectra_path: Path = Path(maldi_data_path) / "spectra"
     if not os.path.exists(spectra_path):
@@ -211,7 +211,7 @@ def extract_maldi_tsf_data(
     tsf_spectra["run_name"] = run_name
     tsf_spectra.sort_values(by="m/z", inplace=True)
 
-    return tsf_spectra, tsf_poslog, thresholds, run_name
+    return tsf_spectra, tsf_poslog, thresholds, run_name, scaling_factor
 
 
 def extract_maldi_run_spectra(
@@ -221,7 +221,7 @@ def extract_maldi_run_spectra(
     intensity_percentile: int = 99,
     num_workers: int = 16,
     tic_normalize: bool = False,
-) -> Tuple[pd.DataFrame, pd.DataFrame, xr.DataArray]:
+) -> Tuple[pd.DataFrame, pd.DataFrame, xr.DataArray, Dict[str, float]]:
     """Extract the full spectra and corresponding poslog information from the MALDI files.
 
     Args:
@@ -243,9 +243,10 @@ def extract_maldi_run_spectra(
 
     Returns:
     -------
-        Tuple[pandas.DataFrame, pandas.DataFrame, xr.DataArray]:
+        Tuple[pandas.DataFrame, pandas.DataFrame, xr.DataArray, Dict[str, float]]:
             Two DataFrames containing the spectra and poslog info across all runs respectively,
-            and a DataArray containing the thresholds to use for each run
+            a DataArray containing the thresholds to use for each run, and a dict containing
+            the TIC scaling factor for each run
     """
     if num_workers <= 0:
         raise ValueError("num_workers specified must be positive")
@@ -254,6 +255,7 @@ def extract_maldi_run_spectra(
     spectra_df: pd.DataFrame = pd.DataFrame()
     thresholds_list: List[np.ndarray] = []
     run_names: List[str] = []
+    scaling_factor_dict: Dict[str, float] = {}
 
     with ProcessPoolExecutor(max_workers=num_workers) as executor:
         future_maldi_data = {
@@ -266,11 +268,12 @@ def extract_maldi_run_spectra(
         for future in as_completed(future_maldi_data):
             mp = future_maldi_data[future]
             try:
-                poslog_mp, spectra_mp, thresholds, run_name = future.result()
+                poslog_mp, spectra_mp, thresholds, run_name, scaling_factor = future.result()
                 poslog_df = pd.concat([poslog_df, poslog_mp])
                 spectra_df = pd.concat([spectra_df, spectra_mp])
                 thresholds_list.append(thresholds)
                 run_names.append(run_name)
+                scaling_factor_dict[run_name] = scaling_factor
             except Exception:
                 print(f"Exception raised while processing {mp}")
 
@@ -280,4 +283,4 @@ def extract_maldi_run_spectra(
         np.stack(thresholds_list), dims=["run_name", "x", "y"], coords={"run_name": run_names}
     )
 
-    return poslog_df, spectra_df, thresholds_arr
+    return poslog_df, spectra_df, thresholds_arr, scaling_factor_dict
