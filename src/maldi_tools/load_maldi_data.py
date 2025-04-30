@@ -139,21 +139,27 @@ def extract_maldi_tsf_data(
     # if not os.path.exists(spectra_path):
     #     os.makedirs(spectra_path)
 
+    print("Loading binary")
     tdf_sdk_binary: CDLL = init_tdf_sdk_api(BASE_PATH)
+    print("Loading TSF object")
     tsf_cursor: TsfData = init_tsf_load_object(maldi_data_path, tdf_sdk_binary)
 
+    print("Generating frame")
     tsf_poslog: pd.DataFrame = tsf_cursor.analysis["MaldiFrameInfo"]
     run_name = os.path.basename(os.path.splitext(maldi_data_path)[0])
     tsf_poslog["run_name"] = run_name
 
+    print("Creating thresholds array")
     thresholds: np.ndarray = np.zeros(tsf_poslog["XIndexPos"].max(), tsf_poslog["YIndexPos"].max())
 
+    print("Generating m/z bins")
     mz_bin_centers, mz_bin_lefts, mz_bin_rights = generate_mz_bins(min_mz, max_mz)
     spectra_dict: Dict[float, float] = {}
     total_intensity = 0
     total_intensity_norm = 0
     num_intensity_vals = 0
 
+    print("About to iterate")
     for sid in tsf_cursor.analysis["Frames"]["Id"].values:
         index_arr, intensity_arr = tsf_read_line_spectrum_v2(
             tdf_sdk=tdf_sdk_binary, handle=tsf_cursor.handle, frame_id=sid
