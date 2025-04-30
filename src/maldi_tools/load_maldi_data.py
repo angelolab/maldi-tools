@@ -139,14 +139,19 @@ def extract_maldi_tsf_data(
     # if not os.path.exists(spectra_path):
     #     os.makedirs(spectra_path)
 
-    print("Loading binary")
+    with open("logging_file.txt", "a") as outfile:
+        outfile.write("Loading TDFSDK API\n")
     tdf_sdk_binary: CDLL = init_tdf_sdk_api(BASE_PATH)
-    print("Loading TSF object")
+    with open("logging_file.txt", "a") as outfile:
+        outfile.write("Loading TDFSDK object\n")
     tsf_cursor: TsfData = init_tsf_load_object(maldi_data_path, tdf_sdk_binary)
 
-    print("Generating frame")
     tsf_poslog: pd.DataFrame = tsf_cursor.analysis["MaldiFrameInfo"]
+    with open("logging_file.txt", "a") as outfile:
+        outfile.write("Getting MALDI run_name\n")
     run_name = os.path.basename(os.path.splitext(maldi_data_path)[0])
+    with open("logging_file.txt", "a") as outfile:
+        outfile.write(f"The MALDI run_name extracted was: {run_name}\n")
     tsf_poslog["run_name"] = run_name
 
     print("Creating thresholds array")
