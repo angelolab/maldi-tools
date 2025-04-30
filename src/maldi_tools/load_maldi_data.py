@@ -110,7 +110,7 @@ def extract_maldi_tsf_data(
     max_mz: float = 4000,
     intensity_percentile: float = 99,
     tic_normalize: bool = False,
-    spectra_sub_dir: Union[str, Path] = os.path.join("output", "extracted"),
+    # spectra_sub_dir: Union[str, Path] = os.path.join("output", "extracted"),
 ) -> Tuple[pd.DataFrame, pd.DataFrame, np.ndarray, str, float]:
     """Extract the spectra data for a particular MALDI run.
 
