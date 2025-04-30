@@ -278,8 +278,9 @@ def extract_maldi_run_spectra(
                 thresholds_list.append(thresholds)
                 run_names.append(run_name)
                 scaling_factor_dict[run_name] = scaling_factor
-            except Exception:
+            except Exception as e:
                 print(f"Exception raised while processing {mp}")
+                print(e)
 
     poslog_df = poslog_df.reset_index(drop=True)
     spectra_df = spectra_df.reset_index(drop=True)
