@@ -140,7 +140,7 @@ def extract_maldi_tsf_data(
     #     os.makedirs(spectra_path)
 
     with open("logging_file.txt", "a") as outfile:
-        outfile.write("Loading TDFSDK API\n")
+        outfile.write(f"Loading TDFSDK API at base path: {BASE_PATH}\n")
     tdf_sdk_binary: CDLL = init_tdf_sdk_api(BASE_PATH)
     with open("logging_file.txt", "a") as outfile:
         outfile.write("Loading TDFSDK object\n")
