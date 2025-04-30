@@ -146,7 +146,9 @@ def extract_maldi_tsf_data(
     run_name = os.path.basename(os.path.splitext(maldi_data_path)[0])
     tsf_poslog["run_name"] = run_name
 
-    thresholds: np.ndarray = np.zeros(tsf_poslog["XIndexPos"].max(), tsf_poslog["YIndexPos"].max())
+    with open("logging_file.txt", "a") as outfile:
+        outfile.write("Defining thresholds array\n")
+    thresholds: np.ndarray = np.zeros((tsf_poslog["XIndexPos"].max(), tsf_poslog["YIndexPos"].max()))
 
     mz_bin_centers, mz_bin_lefts, mz_bin_rights = generate_mz_bins(min_mz, max_mz)
     spectra_dict: Dict[float, float] = {}
@@ -155,6 +157,8 @@ def extract_maldi_tsf_data(
     num_intensity_vals = 0
 
     for sid in tsf_cursor.analysis["Frames"]["Id"].values:
+        with open("logging_file.txt", "a") as outfile:
+            outfile.write(f"Processing spot{sid}\n")
         index_arr, intensity_arr = tsf_read_line_spectrum_v2(
             tdf_sdk=tdf_sdk_binary, handle=tsf_cursor.handle, frame_id=sid
         )
@@ -197,6 +201,8 @@ def extract_maldi_tsf_data(
 
         spot_x: int = tsf_poslog[tsf_poslog["Frame"] == sid]["XIndexPos"].values[0]
         spot_y: int = tsf_poslog[tsf_poslog["Frame"] == sid]["YIndexPos"].values[0]
+        with open("logging_file.txt", "a") as outfile:
+            outfile.write("Indexing thresholds array\n")
         thresholds[spot_x - 1, spot_y - 1] = np.percentile(intensity_arr, intensity_percentile)
 
     scaling_factor = (total_intensity / num_intensity_vals) / (total_intensity_norm / num_intensity_vals)
