@@ -139,11 +139,9 @@ def extract_maldi_tsf_data(
     # if not os.path.exists(spectra_path):
     #     os.makedirs(spectra_path)
 
+    tdf_sdk_binary: CDLL = init_tdf_sdk_api(str(BASE_PATH / "timsdata.dll"))
     with open("logging_file.txt", "a") as outfile:
-        outfile.write(f"Loading TDFSDK API at base path: {BASE_PATH}\n")
-    tdf_sdk_binary: CDLL = init_tdf_sdk_api(BASE_PATH / "timsdata.dll")
-    with open("logging_file.txt", "a") as outfile:
-        outfile.write("Loading TDFSDK object\n")
+        outfile.write(f"Loading TDFSDK object at {maldi_data_path}\n")
     tsf_cursor: TsfData = init_tsf_load_object(maldi_data_path, tdf_sdk_binary)
 
     tsf_poslog: pd.DataFrame = tsf_cursor.analysis["MaldiFrameInfo"]
