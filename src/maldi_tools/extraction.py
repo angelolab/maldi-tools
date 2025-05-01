@@ -295,7 +295,7 @@ def coordinate_integration(
             ]
         )
 
-        intensity_arr = intensity_arr[np.isin(mz_vals, peak_df["m/z"])] * scaling_factor
+        intensity_arr = intensity_arr[np.isin(mz_vals, peak_df["m/z"])] / len(intensity_arr) * scaling_factor
         x: int = poslog_df[poslog_df["Frame"] == sid]["XIndexPos"].values[0]
         y: int = poslog_df[poslog_df["Frame"] == sid]["YIndexPos"].values[0]
 
