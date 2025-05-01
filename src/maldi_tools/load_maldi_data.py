@@ -111,7 +111,7 @@ def extract_maldi_tsf_data(
     intensity_percentile: float = 99,
     tic_normalize: bool = False,
     # spectra_sub_dir: Union[str, Path] = os.path.join("output", "extracted"),
-) -> Tuple[pd.DataFrame, pd.DataFrame, np.ndarray, str, float]:
+) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, np.ndarray, str, float]:
     """Extract the spectra data for a particular MALDI run.
 
     Args:
@@ -131,7 +131,7 @@ def extract_maldi_tsf_data(
 
     Returns:
     -------
-        Tuple[pandas.DataFrame, pandas.DataFrame, np.ndarray, str, float]:
+        Tuple[pandas.DataFrame, pandas.DataFrame, pandas.DataFrame, np.ndarray, str, float]:
             Two DataFrames containing the spectra and poslog info across the run respectively,
             the thresholds array per spot, the name of the run, and the TIC scaling factor
     """
@@ -205,6 +205,9 @@ def extract_maldi_tsf_data(
         outfile.write(f"Number of intensity values: {num_intensity_vals}\n")
         outfile.write(f"Total intensity normalized: {total_intensity_norm}\n")
         outfile.write(f"Computed scaling factor: {scaling_factor}\n")
+    non_normalized_tsf_spectra: pd.DataFrame = pd.DataFrame(
+        spectra_dict.items(), columns=["m/z", "intensity"]
+    )
     if tic_normalize:
         for mz, intensity in spectra_dict.items():
             spectra_dict[mz] = intensity * scaling_factor
@@ -214,7 +217,7 @@ def extract_maldi_tsf_data(
     tsf_spectra["run_name"] = run_name
     tsf_spectra.sort_values(by="m/z", inplace=True)
 
-    return tsf_spectra, tsf_poslog, thresholds, run_name, scaling_factor
+    return non_normalized_tsf_spectra, tsf_spectra, tsf_poslog, thresholds, run_name, scaling_factor
 
 
 def extract_maldi_run_spectra(
@@ -224,7 +227,7 @@ def extract_maldi_run_spectra(
     intensity_percentile: int = 99,
     num_workers: int = 16,
     tic_normalize: bool = False,
-) -> Tuple[pd.DataFrame, pd.DataFrame, xr.DataArray, Dict[str, float]]:
+) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, xr.DataArray, Dict[str, float]]:
     """Extract the full spectra and corresponding poslog information from the MALDI files.
 
     Args:
@@ -246,7 +249,7 @@ def extract_maldi_run_spectra(
 
     Returns:
     -------
-        Tuple[pandas.DataFrame, pandas.DataFrame, xr.DataArray, Dict[str, float]]:
+        Tuple[pandas.DataFrame, pandas.DataFrame, pandas.DataFrame, xr.DataArray, Dict[str, float]]:
             Two DataFrames containing the spectra and poslog info across all runs respectively,
             a DataArray containing the thresholds to use for each run, and a dict containing
             the TIC scaling factor for each run
@@ -254,8 +257,9 @@ def extract_maldi_run_spectra(
     if num_workers <= 0:
         raise ValueError("num_workers specified must be positive")
 
-    poslog_df: pd.DataFrame = pd.DataFrame()
+    non_norm_spectra_df: pd.DataFrame = pd.DataFrame()
     spectra_df: pd.DataFrame = pd.DataFrame()
+    poslog_df: pd.DataFrame = pd.DataFrame()
     thresholds_list: List[np.ndarray] = []
     run_names: List[str] = []
     scaling_factor_dict: Dict[str, float] = {}
@@ -271,9 +275,12 @@ def extract_maldi_run_spectra(
         for future in as_completed(future_maldi_data):
             mp = future_maldi_data[future]
             try:
-                poslog_mp, spectra_mp, thresholds, run_name, scaling_factor = future.result()
-                poslog_df = pd.concat([poslog_df, poslog_mp])
+                non_norm_spectra_mp, spectra_mp, poslog_mp, thresholds, run_name, scaling_factor = (
+                    future.result()
+                )
+                non_norm_spectra_df = pd.concat([non_norm_spectra_df, non_norm_spectra_mp])
                 spectra_df = pd.concat([spectra_df, spectra_mp])
+                poslog_df = pd.concat([poslog_df, poslog_mp])
                 thresholds_list.append(thresholds)
                 run_names.append(run_name)
                 scaling_factor_dict[run_name] = scaling_factor
@@ -281,10 +288,11 @@ def extract_maldi_run_spectra(
                 print(f"Exception raised while processing {mp}")
                 print(e)
 
-    poslog_df = poslog_df.reset_index(drop=True)
+    non_norm_spectra_df = non_norm_spectra_df.reset_index(drop=True)
     spectra_df = spectra_df.reset_index(drop=True)
+    poslog_df = poslog_df.reset_index(drop=True)
     thresholds_arr: xr.DataArray = xr.DataArray(
         np.stack(thresholds_list), dims=["run_name", "x", "y"], coords={"run_name": run_names}
     )
 
-    return poslog_df, spectra_df, thresholds_arr, scaling_factor_dict
+    return non_norm_spectra_df, spectra_df, poslog_df, thresholds_arr, scaling_factor_dict
