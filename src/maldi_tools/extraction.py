@@ -273,8 +273,8 @@ def coordinate_integration(
     image_shape: Tuple[int, int] = (x_size, y_size)
     imgs = np.zeros((len(unique_peaks), *image_shape), dtype=np.float32)
 
-    tdf_sdk_binary: CDLL = init_tdf_sdk_api(BASE_PATH)
-    tsf_cursor: TsfData = load_maldi_data.init_tsf_load_object(run_data_path, tdf_sdk_binary)
+    tdf_sdk_binary: CDLL = init_tdf_sdk_api(str(BASE_PATH / "timsdata.dll"))
+    tsf_cursor: TsfData = load_maldi_data.init_tsf_load_object(str(run_data_path), tdf_sdk_binary)
 
     mz_bin_centers, mz_bin_lefts, mz_bin_rights = load_maldi_data.generate_mz_bins(min_mz, max_mz)
 
