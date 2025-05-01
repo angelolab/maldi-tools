@@ -199,11 +199,12 @@ def extract_maldi_tsf_data(
         spot_y: int = tsf_poslog[tsf_poslog["Frame"] == sid]["YIndexPos"].values[0]
         thresholds[spot_x - 1, spot_y - 1] = np.percentile(intensity_arr, intensity_percentile)
 
-    print(f"Total intensity: {total_intensity}")
-    print(f"Number of intensity values: {num_intensity_vals}")
-    print(f"Total intensity normalized: {total_intensity_norm}")
     scaling_factor = (total_intensity / num_intensity_vals) / (total_intensity_norm / num_intensity_vals)
-    print(f"Computed scaling factor: {scaling_factor}")
+    with open("logging_file.txt", "w") as outfile:
+        outfile.write(f"Total intensity: {total_intensity}\n")
+        outfile.write(f"Number of intensity values: {num_intensity_vals}\n")
+        outfile.write(f"Total intensity normalized: {total_intensity_norm}\n")
+        outfile.write(f"Computed scaling factor: {scaling_factor}\n")
     if tic_normalize:
         for mz, intensity in spectra_dict.items():
             spectra_dict[mz] = intensity * scaling_factor
