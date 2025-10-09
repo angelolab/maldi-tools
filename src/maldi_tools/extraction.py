@@ -12,7 +12,7 @@ import warnings
 from functools import partial
 from operator import itemgetter
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import pandas as pd
@@ -27,7 +27,12 @@ from tqdm.notebook import tqdm
 from maldi_tools import plotting
 
 
-def extract_spectra(imz_data: ImzMLParser, intensity_percentile: int) -> tuple[pd.DataFrame, np.ndarray]:
+def extract_spectra(
+    imz_data: ImzMLParser,
+    intensity_percentile: int,
+    region_num: Optional[int] = None,
+    poslog_path: Optional[Union[str, Path]] = None,
+) -> tuple[pd.DataFrame, np.ndarray]:
     """Iterates over all coordinates after opening the `imzML` data and extracts all masses,
     and sums the intensities for all masses. Creates an intensity image, thresholded on
     `intensity_percentile` with `np.percentile`. The masses are then sorted.
@@ -36,6 +41,9 @@ def extract_spectra(imz_data: ImzMLParser, intensity_percentile: int) -> tuple[p
     ----
         imz_data (ImzMLParser): The imzML object.
         intensity_percentile (int): Used to compute the q-th percentile of the intensities.
+        region (Optional[int]): the specific region to load, requires an associated poslog file
+        poslog_path (Optional[Union[str, pathlib.Path]]): the associated poslog path, ignored if
+            region is None
 
     Returns:
     -------
@@ -43,6 +51,11 @@ def extract_spectra(imz_data: ImzMLParser, intensity_percentile: int) -> tuple[p
         the total masses and their intensities, and the second element is the thresholds matrix
         of the image.
     """
+    if region_num and not poslog_path:
+        raise ValueError(
+            "If region_num set, an associated poslog_path must also be passed so coordinates can be"
+            " identified"
+        )
     imz_coordinates: list = imz_data.coordinates
 
     x_size: int = max(imz_coordinates, key=itemgetter(0))[0]
@@ -50,15 +63,33 @@ def extract_spectra(imz_data: ImzMLParser, intensity_percentile: int) -> tuple[p
 
     image_shape: Tuple[int, int] = (x_size, y_size)
 
+    poslog_data = pd.read_csv(
+        poslog_path,
+        delimiter=" ",
+        names=["Date", "Time", "Region", "PosX", "PosY", "X", "Y", "Z"],
+        usecols=["Region", "X", "Y"],
+        index_col=False,
+        skiprows=1,
+    )
+    poslog_data_sub = poslog_data[poslog_data["Region"] != "__"].copy()
+    poslog_data_sub = (
+        poslog_data[poslog_data["Region"] == region_num].copy() if region_num else poslog_data.copy()
+    )
+    extracted_regions: pd.Series = poslog_data_sub["Region"].str.extract(r"R(\d+)X", expand=False).astype(int)
+    poslog_data_sub["Region"] = extracted_regions
+
     thresholds: np.ndarray = np.zeros(image_shape)
     total_spectra: Dict[float, float] = {}
 
     for idx, (x, y, _) in tqdm(enumerate(imz_data.coordinates), total=len(imz_coordinates)):
-        mzs, intensities = imz_data.getspectrum(idx)
-        for mass_idx, mz in enumerate(mzs):
-            total_spectra[mz] = (0 if mz not in total_spectra else total_spectra[mz]) + intensities[mass_idx]
+        if x in poslog_data_sub["X"].values and y in poslog_data_sub["Y"].values:
+            mzs, intensities = imz_data.getspectrum(idx)
+            for mass_idx, mz in enumerate(mzs):
+                total_spectra[mz] = (0 if mz not in total_spectra else total_spectra[mz]) + intensities[
+                    mass_idx
+                ]
 
-        thresholds[x - 1, y - 1] = np.percentile(intensities, intensity_percentile)
+            thresholds[x - 1, y - 1] = np.percentile(intensities, intensity_percentile)
 
     total_mass_df = pd.DataFrame(total_spectra.items(), columns=["m/z", "intensity"])
 
@@ -69,7 +100,7 @@ def extract_spectra(imz_data: ImzMLParser, intensity_percentile: int) -> tuple[p
 
 
 def rolling_window(
-    total_mass_df: pd.DataFrame, intensity_percentile: int, window_size: int = 5000
+    total_mass_df: pd.DataFrame, intensity_percentile: int, window_size: Optional[int] = 5000
 ) -> tuple[np.ndarray, np.ndarray]:
     """Computes the rolling window log intensities and the rolling window log intensity percentiles.
 
@@ -78,7 +109,7 @@ def rolling_window(
         total_mass_df (pd.DataFrame): A dataframe containing all the masses and their
             relative intensities.
         intensity_percentile (int): The intensity for the quantile calculation.
-        window_size (int, optional): The sizve of the window for the rolling window method.
+        window_size (Optional[int]): The sizve of the window for the rolling window method.
             Defaults to 5000.
 
     Returns:
@@ -316,7 +347,7 @@ def library_matching(
     library_peak_df: pd.DataFrame,
     ppm: int,
     extraction_dir: Path,
-    adducts: bool = False,
+    adducts: Optional[bool] = False,
 ) -> pd.DataFrame:
     """Matches the image peaks to the library, and creates a csv which contains the library target masses,
     and their associated peaks found in the data file, if they match within a tolerance.
@@ -328,7 +359,7 @@ def library_matching(
         ppm (int): The ppm for an acceptable mass error range between the observed mass and any target
         mass in the library.
         extraction_dir (Path): The directory to save extracted data in.
-        adducts (bool, optional): Add adducts together. Defaults to False. (Not implemented feature)
+        adducts (Optional[bool]): Add adducts together. Defaults to False. (Not implemented feature)
 
     Returns:
     -------
