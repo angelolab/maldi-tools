@@ -73,7 +73,9 @@ def extract_spectra(
     )
     poslog_data_sub = poslog_data[poslog_data["Region"] != "__"].copy()
     poslog_data_sub = (
-        poslog_data[poslog_data["Region"] == region_num].copy() if region_num else poslog_data.copy()
+        poslog_data_sub[poslog_data_sub["Region"] == region_num].copy()
+        if region_num
+        else poslog_data_sub.copy()
     )
     extracted_regions: pd.Series = poslog_data_sub["Region"].str.extract(r"R(\d+)X", expand=False).astype(int)
     poslog_data_sub["Region"] = extracted_regions
