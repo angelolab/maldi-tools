@@ -27,11 +27,43 @@ from tqdm.notebook import tqdm
 from maldi_tools import plotting
 
 
+def load_poslog(
+    poslog_path: Union[str, Path],
+    imz_data: ImzMLParser,
+) -> pd.DataFrame:
+    """Loads and processes the poslog region info and harmonizes it with the imzML coordinate data.
+
+    Args:
+    ----
+        poslog_path (Union[str, Path]): the associated poslog path
+        imz_data (ImzMLParser): The imzML object
+
+    Returns:
+    -------
+        pd.DataFrame: A DataFrame listing each coordinate and its corresponding region
+    """
+    poslog_data = pd.read_csv(
+        poslog_path,
+        delimiter=" ",
+        names=["Date", "Time", "Region", "PosX", "PosY", "X", "Y", "Z"],
+        usecols=["Region", "X", "Y"],
+        index_col=False,
+        skiprows=1,
+    )
+    poslog_data = poslog_data[poslog_data["Region"] != "__"].copy()
+    poslog_data["Region"] = poslog_data["Region"].str.extract(r"R(\d+)X", expand=False).astype(int)
+    coords: np.ndarray = np.array([coord[:2] for coord in imz_data.coordinates])
+    coords_subset: np.ndarray = coords[: poslog_data.shape[0], :]
+    poslog_data[["X", "Y"]] = coords_subset
+
+    return poslog_data
+
+
 def extract_spectra(
     imz_data: ImzMLParser,
     intensity_percentile: int,
     region_num: Optional[int] = None,
-    poslog_path: Optional[Union[str, Path]] = None,
+    poslog_data: pd.DataFrame = None,
 ) -> tuple[pd.DataFrame, np.ndarray]:
     """Iterates over all coordinates after opening the `imzML` data and extracts all masses,
     and sums the intensities for all masses. Creates an intensity image, thresholded on
@@ -41,9 +73,9 @@ def extract_spectra(
     ----
         imz_data (ImzMLParser): The imzML object.
         intensity_percentile (int): Used to compute the q-th percentile of the intensities.
-        region (Optional[int]): the specific region to load, requires an associated poslog file
-        poslog_path (Optional[Union[str, pathlib.Path]]): the associated poslog path, ignored if
-            region is None
+        region (Optional[int]): The specific region to load, requires an associated poslog file
+        poslog_path (Optional[Union[str, pathlib.Path]]): The associated poslog region and
+            coordinate data
 
     Returns:
     -------
@@ -51,9 +83,9 @@ def extract_spectra(
         the total masses and their intensities, and the second element is the thresholds matrix
         of the image.
     """
-    if region_num and not poslog_path:
+    if region_num and not poslog_data:
         raise ValueError(
-            "If region_num set, an associated poslog_path must also be passed so coordinates can be"
+            "If region_num set, an associated poslog_data must also be passed so coordinates can be"
             " identified"
         )
     imz_coordinates: list = imz_data.coordinates
@@ -63,27 +95,13 @@ def extract_spectra(
 
     image_shape: Tuple[int, int] = (x_size, y_size)
 
-    poslog_data = pd.read_csv(
-        poslog_path,
-        delimiter=" ",
-        names=["Date", "Time", "Region", "PosX", "PosY", "X", "Y", "Z"],
-        usecols=["Region", "X", "Y"],
-        index_col=False,
-        skiprows=1,
-    )
-    poslog_data_sub = poslog_data[poslog_data["Region"] != "__"].copy()
-    poslog_data_sub["Region"] = poslog_data_sub["Region"].str.extract(r"R(\d+)X", expand=False).astype(int)
-    coords: np.ndarray = np.array([coord[:2] for coord in imz_coordinates])
-    coords_subset: np.ndarray = coords[: poslog_data_sub.shape[0], :]
-    poslog_data_sub[["X", "Y"]] = coords_subset
-
-    if region_num > poslog_data_sub["Region"].max():
+    if region_num > poslog_data["Region"].max():
         raise ValueError("Region num out of range")
 
     poslog_data_sub = (
-        poslog_data_sub[poslog_data_sub["Region"] == region_num].copy()
+        poslog_data[poslog_data["Region"] == region_num].copy()
         if region_num is not None
-        else poslog_data_sub.copy()
+        else poslog_data.copy()
     )
 
     thresholds: np.ndarray = np.zeros(image_shape)
