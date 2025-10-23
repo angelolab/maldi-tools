@@ -72,13 +72,19 @@ def extract_spectra(
         skiprows=1,
     )
     poslog_data_sub = poslog_data[poslog_data["Region"] != "__"].copy()
+    poslog_data_sub["Region"] = poslog_data_sub["Region"].str.extract(r"R(\d+)X", expand=False).astype(int)
+    coords: np.ndarray = np.array([coord[:2] for coord in imz_coordinates])
+    coords_subset: np.ndarray = coords[: poslog_data_sub.shape[0], :]
+    poslog_data_sub[["X", "Y"]] = coords_subset
+
+    if region_num > poslog_data_sub["Region"].max():
+        raise ValueError("Region num out of range")
+
     poslog_data_sub = (
         poslog_data_sub[poslog_data_sub["Region"] == region_num].copy()
-        if region_num
+        if region_num is not None
         else poslog_data_sub.copy()
     )
-    extracted_regions: pd.Series = poslog_data_sub["Region"].str.extract(r"R(\d+)X", expand=False).astype(int)
-    poslog_data_sub["Region"] = extracted_regions
 
     thresholds: np.ndarray = np.zeros(image_shape)
     total_spectra: Dict[float, float] = {}
