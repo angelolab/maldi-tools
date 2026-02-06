@@ -271,11 +271,11 @@ def coordinate_integration(
         mzs, intensities = imz_data.getspectrum(idx)
 
         for i_idx, peak in peak_df.loc[peak_df["m/z"].isin(mzs), "peak"].reset_index(drop=True).items():
-            left_idx = abs(intensities.values - l_ips_r[i_idx]).idxmin()
-            right_idx = abs(intensities.values - r_ips_r[i_idx]).idxmin()
-            imgs[peak_dict[peak], x - 1, y - 1] += integrate.simpson(
-                intensities.values[left_idx:right_idx]
-            ) - (peak_widths_height * (right_idx - left_idx))
+            left_idx = abs(intensities - l_ips_r[i_idx]).idxmin()
+            right_idx = abs(intensities - r_ips_r[i_idx]).idxmin()
+            imgs[peak_dict[peak], x - 1, y - 1] += integrate.simpson(intensities[left_idx:right_idx]) - (
+                peak_widths_height * (right_idx - left_idx)
+            )
 
     img_data = xr.DataArray(
         data=imgs,
