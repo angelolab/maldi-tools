@@ -325,11 +325,13 @@ def coordinate_integration(peak_df: pd.DataFrame, imz_data: ImzMLParser) -> xr.D
         for i_idx, peak in peak_df.loc[peak_df["m/z"].isin(mzs), "peak"].reset_index(drop=True).items():
             imgs[peak_dict[peak], x - 1, y - 1] += intensity[i_idx]
 
-    xr.DataArray(
+    img_data = xr.DataArray(
         data=imgs,
         coords={"peak": unique_peaks, "x": range(x_size), "y": range(y_size)},
         dims=["peak", "x", "y"],
     )
+
+    return img_data
 
 
 def _matching_vec(obs_mz: pd.Series, library_peak_df: pd.DataFrame, ppm: int) -> pd.Series:
