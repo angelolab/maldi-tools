@@ -232,8 +232,10 @@ def peak_spectra(
     return panel_df
 
 
-def coordinate_integration(
+def coordinate_integration_aoc(
+    total_mass_df: pd.DataFrame,
     peak_df: pd.DataFrame,
+    peak_candidates: np.ndarray,
     l_ips_r: np.ndarray,
     r_ips_r: np.ndarray,
     peak_widths_height: np.ndarray,
@@ -270,12 +272,16 @@ def coordinate_integration(
     for idx, (x, y, _) in tqdm(enumerate(imz_data.coordinates), total=len(imz_data.coordinates)):
         mzs, intensities = imz_data.getspectrum(idx)
 
-        for i_idx, peak in peak_df.loc[peak_df["m/z"].isin(mzs), "peak"].reset_index(drop=True).items():
-            left_idx = np.argmin(abs(intensities - l_ips_r[i_idx]))
-            right_idx = np.argmin(abs(intensities - r_ips_r[i_idx]))
-            imgs[peak_dict[peak], x - 1, y - 1] += integrate.simpson(intensities[left_idx:right_idx]) - (
-                peak_widths_height[i_idx] * (right_idx - left_idx)
-            )
+        for peak_idx, peak in peak_df.loc[peak_df["m/z"].isin(mzs), "peak"].reset_index(drop=True).items():
+            if peak in mzs:  # may be redundant
+                peak_idx = np.where(peak_candidates == peak)[0][0]
+                left_idx = l_ips_r[peak_idx]
+                right_idx = r_ips_r[peak_idx] + 1
+                peak_widths_height[peak_idx]
+
+                imgs[peak_dict[peak], x - 1, y - 1] += integrate.simpson(
+                    total_mass_df.intensity.values[left_idx:right_idx]
+                )
 
     img_data = xr.DataArray(
         data=imgs,
@@ -284,6 +290,46 @@ def coordinate_integration(
     )
 
     return img_data
+
+
+def coordinate_integration(peak_df: pd.DataFrame, imz_data: ImzMLParser) -> xr.DataArray:
+    """Integrates the coordinates with the discovered, post-processed peaks and generates an image for
+    each of the peaks using the imzML coordinate data.
+
+    Args:
+    ----
+        peak_df (pd.DataFrame): The unique peaks from the data.
+        imz_data (ImzMLParser): The imzML object.
+
+    Returns:
+    -------
+        xr.DataArray: A data structure which holds all the images for each peak.
+    """
+    unique_peaks = peak_df["peak"].unique()
+    peak_dict = dict(zip(unique_peaks, np.arange((len(unique_peaks)))))
+
+    imz_coordinates: list = imz_data.coordinates
+
+    x_size: int = max(imz_coordinates, key=itemgetter(0))[0]
+    y_size: int = max(imz_coordinates, key=itemgetter(1))[1]
+
+    image_shape: Tuple[int, int] = (x_size, y_size)
+
+    imgs = np.zeros((len(unique_peaks), *image_shape), dtype=np.float32)
+
+    for idx, (x, y, _) in tqdm(enumerate(imz_data.coordinates), total=len(imz_data.coordinates)):
+        mzs, intensities = imz_data.getspectrum(idx)
+
+        intensity: np.ndarray = intensities[np.isin(mzs, peak_df["m/z"])]
+
+        for i_idx, peak in peak_df.loc[peak_df["m/z"].isin(mzs), "peak"].reset_index(drop=True).items():
+            imgs[peak_dict[peak], x - 1, y - 1] += intensity[i_idx]
+
+    xr.DataArray(
+        data=imgs,
+        coords={"peak": unique_peaks, "x": range(x_size), "y": range(y_size)},
+        dims=["peak", "x", "y"],
+    )
 
 
 def _matching_vec(obs_mz: pd.Series, library_peak_df: pd.DataFrame, ppm: int) -> pd.Series:
