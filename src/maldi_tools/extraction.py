@@ -53,7 +53,7 @@ def extract_spectra(imz_data: ImzMLParser, intensity_percentile: int) -> tuple[p
         mzs, intensities = imz_data.getspectrum(idx)
         for mass_idx, mz in enumerate(mzs):
             total_spectra[mz] = (0 if mz not in total_spectra else total_spectra[mz]) + intensities[mass_idx]
-            count_spectra[mz] = (0 if mz not in total_spectra else count_spectra[mz]) + 1
+            count_spectra[mz] = (0 if mz not in count_spectra else count_spectra[mz]) + 1
 
         thresholds[x - 1, y - 1] = np.percentile(intensities, intensity_percentile)
 
