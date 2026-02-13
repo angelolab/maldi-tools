@@ -47,15 +47,18 @@ def extract_spectra(imz_data: ImzMLParser, intensity_percentile: int) -> tuple[p
 
     thresholds: np.ndarray = np.zeros(image_shape)
     total_spectra: Dict[float, float] = {}
+    count_spectra: Dict[float, int] = {}
 
     for idx, (x, y, _) in tqdm(enumerate(imz_data.coordinates), total=len(imz_coordinates)):
         mzs, intensities = imz_data.getspectrum(idx)
         for mass_idx, mz in enumerate(mzs):
             total_spectra[mz] = (0 if mz not in total_spectra else total_spectra[mz]) + intensities[mass_idx]
+            count_spectra[mz] = (0 if mz not in total_spectra else count_spectra[mz]) + 1
 
         thresholds[x - 1, y - 1] = np.percentile(intensities, intensity_percentile)
 
-    total_mass_df = pd.DataFrame(total_spectra.items(), columns=["m/z", "intensity"])
+    avg_spectra: Dict[float, float] = {mz: total_spectra[mz] / count_spectra[mz] for mz in total_spectra}
+    total_mass_df = pd.DataFrame(avg_spectra.items(), columns=["m/z", "intensity"])
 
     total_mass_df.sort_values(by="m/z", inplace=True)
     total_mass_df.reset_index(drop=True, inplace=True)
