@@ -34,7 +34,7 @@ repos:
         name: Formatting - isort
         stages: [commit, push, manual]
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.1.1
+    rev: v1.20.2
     hooks:
       - id: mypy
         name: Static Type Checking - mypy
